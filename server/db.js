@@ -52,15 +52,19 @@ CREATE TABLE IF NOT EXISTS stories (
   updated_at timestamptz NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS stories_column_pos ON stories (column_id, position);
+-- v3: fortlaufende Nummer für Story-IDs (US-1, US-2 …); bestehende Stories werden automatisch nummeriert
+ALTER TABLE stories ADD COLUMN IF NOT EXISTS number serial;
 `;
 
-export const DEFAULT_BRANDING = { appName: 'Story Board', color: '#4f46e5', logo: '' };
+export const DEFAULT_BRANDING = { appName: 'Story Board', color: '#5e6ad2', logo: '' };
 
 export async function migrate() {
   // Advisory Lock, damit parallele Container (Rolling Deploy) nicht gleichzeitig migrieren
   await tx(async (c) => {
     await c.query('SELECT pg_advisory_xact_lock(424242)');
     await c.query(SCHEMA);
+    // v3: alte Standardfarbe auf die neue Standardfarbe heben (nur wenn nie geändert)
+    await c.query(`UPDATE settings SET value = jsonb_set(value, '{color}', '"#5e6ad2"') WHERE key = 'branding' AND value->>'color' = '#4f46e5'`);
     const { rowCount } = await c.query('SELECT 1 FROM board_columns LIMIT 1');
     if (!rowCount) await seed(c);
   });

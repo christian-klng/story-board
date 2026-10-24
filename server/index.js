@@ -53,7 +53,7 @@ app.post('/api/logout', (req, res) => { clearCookie(res); res.json({ ok: true })
 app.use('/api', requireAuth);
 
 // ---------- Board ----------
-const storySelect = `SELECT id, column_id AS "column", position, title, role, want, benefit, criteria, priority, points, epic,
+const storySelect = `SELECT id, number, column_id AS "column", position, title, role, want, benefit, criteria, priority, points, epic,
   extract(epoch FROM created_at) * 1000 AS created FROM stories`;
 
 async function loadBoard(client = pool) {

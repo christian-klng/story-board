@@ -3,16 +3,62 @@
   'use strict';
 
   const PRIO = {
-    must:   { label: 'Must',   rank: 0, color: 'var(--must)' },
-    should: { label: 'Should', rank: 1, color: 'var(--should)' },
-    could:  { label: 'Could',  rank: 2, color: 'var(--could)' },
-    wont:   { label: "Won't",  rank: 3, color: 'var(--wont)' },
+    must:   { label: 'Must have',   rank: 0 },
+    should: { label: 'Should have', rank: 1 },
+    could:  { label: 'Could have',  rank: 2 },
+    wont:   { label: "Won't have",  rank: 3 },
   };
-  const SWATCHES = ['#4f46e5', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#111827'];
-  const DEFAULT_SETTINGS = { appName: 'Story Board', color: '#4f46e5', logo: '' };
+  const SWATCHES = ['#5e6ad2', '#0f7ae5', '#26b5ce', '#4cb782', '#f2994a', '#eb5757', '#d55bb0', '#23252b'];
+  const DEFAULT_SETTINGS = { appName: 'Story Board', color: '#5e6ad2', logo: '' };
+  const ID_PREFIX = 'US';
 
   const $ = (s, el = document) => el.querySelector(s);
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const icon = (name, cls = 'ic') => `<svg class="${cls}"><use href="#i-${name}"/></svg>`;
+
+  // ---------- Icons im Linear-Stil ----------
+  // Priorität: Must = Warnquadrat, Should/Could = Signalbalken, Won't = gestrichelt
+  function prioIcon(p) {
+    if (p === 'must') {
+      return `<svg class="prio" viewBox="0 0 14 14" aria-label="Must have"><rect x="1" y="1" width="12" height="12" rx="3" fill="var(--urgent)"/><path d="M7 3.8v4" stroke="#fff" stroke-width="1.6" stroke-linecap="round"/><circle cx="7" cy="10.1" r=".95" fill="#fff"/></svg>`;
+    }
+    if (p === 'wont') {
+      return `<svg class="prio" viewBox="0 0 14 14" aria-label="Won't have"><path d="M2 7h2M6 7h2M10 7h2" stroke="var(--text-3)" stroke-width="1.6" stroke-linecap="round"/></svg>`;
+    }
+    const on = p === 'should' ? 3 : 2;
+    const bars = [[1.5, 8.5, 4], [5.5, 5.5, 7], [9.5, 2, 10.5]]
+      .map(([x, y, h], i) => `<rect x="${x}" y="${y}" width="3" height="${h}" rx="1" fill="${i < on ? 'var(--text-2)' : 'var(--border-strong)'}"/>`).join('');
+    return `<svg class="prio" viewBox="0 0 14 14" aria-label="${PRIO[p].label}">${bars}</svg>`;
+  }
+
+  // Status: erste Spalte gestrichelt, letzte mit Haken, dazwischen Fortschrittskreise
+  function statusIcon(ci, n = state.columns.length) {
+    const s = 'class="status" viewBox="0 0 14 14"';
+    if (ci === 0 && n > 1) {
+      return `<svg ${s}><circle cx="7" cy="7" r="5.5" fill="none" stroke="var(--text-3)" stroke-width="1.5" stroke-dasharray="1.6 1.9"/></svg>`;
+    }
+    if (ci === n - 1 && n > 1) {
+      return `<svg ${s}><circle cx="7" cy="7" r="6.25" fill="var(--primary)"/><path d="m4.4 7.2 1.8 1.8 3.5-3.8" fill="none" stroke="var(--primary-ink)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+    }
+    const frac = n > 2 ? (ci - 1) / (n - 2) : 0; // 0 … <1
+    const color = frac === 0 ? 'var(--text-3)' : frac >= 0.6 ? 'var(--green)' : 'var(--amber)';
+    let pie = '';
+    if (frac > 0) {
+      const a = frac * 2 * Math.PI, r = 3;
+      const x = 7 + r * Math.sin(a), y = 7 - r * Math.cos(a);
+      pie = frac >= 0.999 ? `<circle cx="7" cy="7" r="${r}" fill="${color}"/>`
+        : `<path d="M7 7V4A3 3 0 ${frac > 0.5 ? 1 : 0} 1 ${x.toFixed(2)} ${y.toFixed(2)}Z" fill="${color}"/>`;
+    }
+    return `<svg ${s}><circle cx="7" cy="7" r="5.5" fill="none" stroke="${color}" stroke-width="1.5"/>${pie}</svg>`;
+  }
+
+  // Jedes Epic bekommt eine feste Farbe aus seinem Namen
+  function epicColor(name) {
+    if (!name) return 'var(--text-3)';
+    let h = 0; for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+    return `hsl(${h % 360} 62% 55%)`;
+  }
+  const storyKey = (s) => (s.number ? `${ID_PREFIX}-${s.number}` : '');
 
   let state = { settings: { ...DEFAULT_SETTINGS }, columns: [], stories: [] };
 
@@ -96,11 +142,11 @@
     const root = document.documentElement.style;
     root.setProperty('--primary', s.color);
     root.setProperty('--primary-ink', inkFor(s.color));
-    $('meta[name=theme-color]').content = s.color;
     document.title = s.appName;
     $('#appName').textContent = s.appName;
     $('#lockTitle').textContent = s.appName;
-    for (const el of [$('#logo'), $('#lockLogo')]) el.innerHTML = logoHTML(s);
+    for (const el of [$('#logo'), $('#lockLogo'), ...document.querySelectorAll('[data-logo]')]) el.innerHTML = logoHTML(s);
+    document.querySelectorAll('.swatch').forEach((sw) => sw.classList.toggle('active', sw.dataset.c.toLowerCase() === s.color.toLowerCase()));
   }
 
   // ---------- Rendering ----------
@@ -125,24 +171,24 @@
   }
 
   function cardHTML(s, ci, idx, len) {
-    const p = PRIO[s.priority] || PRIO.could;
     const sentence = (s.role || s.want || s.benefit)
-      ? `<p class="sentence">Als <b>${esc(s.role || '…')}</b> möchte ich <b>${esc(s.want || '…')}</b>${s.benefit ? `, damit ${esc(s.benefit)}` : ''}.</p>` : '';
+      ? `<p class="sentence">Als ${esc(s.role || '…')} möchte ich ${esc(s.want || '…')}${s.benefit ? `, damit ${esc(s.benefit)}` : ''}.</p>` : '';
     const ac = (s.criteria || []).length;
     const manual = ui.sort === 'manual';
-    return `<article class="card" draggable="true" data-id="${esc(s.id)}" style="--prio:${p.color}">
+    return `<article class="card" draggable="true" data-id="${esc(s.id)}">
+      <div class="card-top"><span class="card-id">${storyKey(s)}</span></div>
       <h4>${esc(s.title)}</h4>${sentence}
       <div class="meta">
-        <span class="chip prio">${p.label}</span>
-        ${s.epic ? `<span class="chip epic">${esc(s.epic)}</span>` : ''}
-        ${ac ? `<span class="chip ac">✓ ${ac} AK</span>` : ''}
-        ${s.points ? `<span class="chip pts">${s.points} SP</span>` : ''}
+        <span class="badge icon-only" title="${PRIO[s.priority]?.label || ''}">${prioIcon(s.priority)}</span>
+        ${s.epic ? `<span class="badge"><span class="dot" style="background:${epicColor(s.epic)}"></span>${esc(s.epic)}</span>` : ''}
+        ${ac ? `<span class="badge" title="Akzeptanzkriterien">${icon('check')}${ac}</span>` : ''}
+        ${s.points ? `<span class="badge pts-badge" title="Story Points">${s.points}</span>` : ''}
       </div>
       <div class="card-move">
-        ${manual ? `<button data-move="up" ${idx === 0 ? 'disabled' : ''} aria-label="Nach oben">↑</button>
-        <button data-move="down" ${idx === len - 1 ? 'disabled' : ''} aria-label="Nach unten">↓</button>` : ''}
-        <button data-move="left" ${ci === 0 ? 'disabled' : ''} aria-label="Spalte zurück">←</button>
-        <button data-move="right" ${ci === state.columns.length - 1 ? 'disabled' : ''} aria-label="Spalte vor">→</button>
+        ${manual ? `<button data-move="up" ${idx === 0 ? 'disabled' : ''} aria-label="Nach oben" title="Nach oben">${icon('chev-u')}</button>
+        <button data-move="down" ${idx === len - 1 ? 'disabled' : ''} aria-label="Nach unten" title="Nach unten">${icon('chev-d')}</button>` : ''}
+        <button data-move="left" ${ci === 0 ? 'disabled' : ''} aria-label="Spalte zurück" title="Spalte zurück">${icon('chev-l')}</button>
+        <button data-move="right" ${ci === state.columns.length - 1 ? 'disabled' : ''} aria-label="Spalte vor" title="Spalte vor">${icon('chev-r')}</button>
       </div>
     </article>`;
   }
@@ -157,18 +203,28 @@
       const list = visibleStories(c.id);
       const pts = list.reduce((a, s) => a + (+s.points || 0), 0);
       return `<section class="column" data-col="${esc(c.id)}">
-        <div class="col-head"><span>${esc(c.name)} ${pts ? `<span class="col-points">· ${pts} SP</span>` : ''}</span><span class="count">${list.length}</span></div>
+        <div class="col-head">
+          ${statusIcon(ci)}<span class="name">${esc(c.name)}</span><span class="count">${list.length}</span>
+          <span class="end">${pts ? `<span class="pts">${pts} SP</span>` : ''}
+            <button class="icon-btn" data-add="${esc(c.id)}" aria-label="Story in ${esc(c.name)} anlegen" title="Story anlegen">${icon('plus')}</button></span>
+        </div>
         ${list.length ? list.map((s, i) => cardHTML(s, ci, i, list.length)).join('') : '<div class="empty">Keine Stories</div>'}
       </section>`;
     }).join('');
     board.scrollLeft = scrollPos;
 
     $('#tabs').innerHTML = state.columns.map((c, i) =>
-      `<button class="tab ${i === activeCol ? 'active' : ''}" data-i="${i}">${esc(c.name)}<span class="count">${visibleStories(c.id).length}</span></button>`).join('');
+      `<button class="tab ${i === activeCol ? 'active' : ''}" data-i="${i}">${statusIcon(i)}${esc(c.name)}<span class="count">${visibleStories(c.id).length}</span></button>`).join('');
 
     const epics = [...new Set(state.stories.map((s) => s.epic).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'de'));
+    if (ui.epic && !epics.includes(ui.epic)) ui.epic = '';
     $('#epicFilter').innerHTML = '<option value="">Alle Epics</option>' + epics.map((e) => `<option ${e === ui.epic ? 'selected' : ''}>${esc(e)}</option>`).join('');
+    $('#epicDot').style.background = epicColor(ui.epic);
     $('#epicList').innerHTML = epics.map((e) => `<option value="${esc(e)}">`).join('');
+
+    const total = state.stories.length;
+    const totalPts = state.stories.reduce((a, s) => a + (+s.points || 0), 0);
+    $('#stats').textContent = `${total} ${total === 1 ? 'Story' : 'Stories'} · ${totalPts} SP`;
   }
 
   // Tabs ↔ horizontales Scrollen (Mobil)
@@ -213,6 +269,8 @@
   }
 
   $('#board').addEventListener('click', (e) => {
+    const add = e.target.closest('[data-add]');
+    if (add) return openStory(null, add.dataset.add);
     const btn = e.target.closest('[data-move]');
     const card = e.target.closest('.card');
     if (!card) return;
@@ -267,20 +325,30 @@
   const storyDlg = $('#storyDlg');
   let editingId = null;
 
-  function openStory(id = null) {
+  function openStory(id = null, columnId = null) {
     editingId = id;
     const f = $('#storyForm');
     const s = id ? state.stories.find((x) => x.id === id)
-      : { title: '', role: '', want: '', benefit: '', criteria: [], priority: 'could', points: '', epic: ui.epic, column: state.columns[activeCol]?.id };
-    $('#storyDlgTitle').textContent = id ? 'Story bearbeiten' : 'Neue Story';
+      : { title: '', role: '', want: '', benefit: '', criteria: [], priority: 'could', points: '', epic: ui.epic, column: columnId || state.columns[activeCol]?.id };
+    $('#storyDlgTitle').textContent = id ? `${storyKey(s) || 'Story'} · bearbeiten` : 'Neue Story';
     $('#deleteStoryBtn').hidden = !id;
     $('#columnSelect').innerHTML = state.columns.map((c) => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('');
     for (const k of ['title', 'role', 'want', 'benefit', 'priority', 'epic', 'column']) f.elements[k].value = s[k] ?? '';
     f.elements.points.value = s.points ? String(s.points) : '';
     f.elements.criteria.value = (s.criteria || []).join('\n');
+    updatePropIcons();
     storyDlg.showModal();
+    if (!id) f.elements.title.focus();
   }
+  function updatePropIcons() {
+    const f = $('#storyForm').elements;
+    $('#propPrioIc').innerHTML = prioIcon(f.priority.value);
+    $('#propColIc').innerHTML = statusIcon(Math.max(0, state.columns.findIndex((c) => c.id === f.column.value)));
+    $('#propEpicDot').style.background = epicColor(f.epic.value.trim());
+  }
+  $('#storyForm').addEventListener('input', updatePropIcons);
   $('#addBtn').addEventListener('click', () => openStory());
+  $('#addBtnTop').addEventListener('click', () => openStory(null, state.columns[0]?.id));
 
   storyDlg.addEventListener('close', () => {
     if (storyDlg.returnValue !== 'save') return;

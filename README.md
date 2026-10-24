@@ -5,6 +5,7 @@ Eine schlanke Übersicht für User Stories in der Produktentwicklung – als Boa
 ## Funktionen
 
 - **Spalten-Board** (Standard: Backlog · Bereit · In Arbeit · Review · Fertig), Spalten frei umbenennbar, hinzufügen, löschen
+- **Helles, ruhiges Design** im Stil von Linear: Status-Icons pro Spalte, Prioritäts-Balken, farbige Epics, Story-IDs (US-1, US-2 …)
 - **User Stories** im Format *„Als … möchte ich … damit …"* mit Akzeptanzkriterien, MoSCoW-Priorität, Story Points (Fibonacci) und Epic
 - **Sortierung** manuell, nach Priorität, Story Points, Epic, Datum oder Titel – plus Suche und Epic-Filter
 - **Verschieben** per Drag & Drop (Desktop) oder Pfeiltasten auf der Karte (Mobil)

@@ -3,23 +3,42 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#4f46e5">
+  <meta name="theme-color" content="#fbfbfc">
+  <meta name="color-scheme" content="light">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <title>Story Board</title>
   <link rel="manifest" href="manifest.webmanifest">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap">
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
+  <!-- Icons -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="i-search" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.5" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="m10.5 10.5 3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+    <symbol id="i-plus" viewBox="0 0 16 16"><path d="M8 3v10M3 8h10" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+    <symbol id="i-gear" viewBox="0 0 16 16"><path d="M6.9 1.8h2.2l.35 1.7c.4.15.77.37 1.1.63l1.65-.55 1.1 1.9-1.3 1.15c.07.42.07.86 0 1.28l1.3 1.15-1.1 1.9-1.65-.55c-.33.26-.7.48-1.1.63l-.35 1.7H6.9l-.35-1.7a4.2 4.2 0 0 1-1.1-.63l-1.65.55-1.1-1.9L4 8.64a3.9 3.9 0 0 1 0-1.28L2.7 6.21l1.1-1.9 1.65.55c.33-.26.7-.48 1.1-.63l.35-1.7Z" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"/><circle cx="8" cy="8" r="1.9" fill="none" stroke="currentColor" stroke-width="1.3"/></symbol>
+    <symbol id="i-lock" viewBox="0 0 16 16"><rect x="3.5" y="7" width="9" height="6.5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M5.5 7V5.5a2.5 2.5 0 0 1 5 0V7" fill="none" stroke="currentColor" stroke-width="1.4"/></symbol>
+    <symbol id="i-x" viewBox="0 0 16 16"><path d="m4 4 8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+    <symbol id="i-check" viewBox="0 0 16 16"><path d="m3.5 8.5 3 3 6-7" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-sort" viewBox="0 0 16 16"><path d="M3 4.5h10M5 8h6M7 11.5h2" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></symbol>
+    <symbol id="i-chev-l" viewBox="0 0 16 16"><path d="m9.5 4-4 4 4 4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-chev-r" viewBox="0 0 16 16"><path d="m6.5 4 4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-chev-u" viewBox="0 0 16 16"><path d="m4 9.5 4-4 4 4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-chev-d" viewBox="0 0 16 16"><path d="m4 6.5 4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+  </svg>
+
   <!-- Passwort-Sperre -->
   <section id="lock" class="lock" hidden>
     <form id="lockForm" class="lock-card">
-      <div class="lock-logo" id="lockLogo"></div>
+      <div class="logo lg" id="lockLogo"></div>
       <h1 id="lockTitle">Story Board</h1>
       <p id="lockHint" class="muted">Bitte Passwort eingeben</p>
-      <input id="lockPw" type="password" autocomplete="current-password" placeholder="Passwort" required>
+      <input id="lockPw" class="input" type="password" autocomplete="current-password" placeholder="Passwort" required>
       <p id="lockError" class="error" hidden></p>
-      <button class="btn primary" type="submit" id="lockBtn">Entsperren</button>
+      <button class="btn primary block" type="submit" id="lockBtn">Entsperren</button>
     </form>
   </section>
 
@@ -29,71 +48,87 @@
       <div class="brand">
         <div class="logo" id="logo"></div>
         <span id="appName">Story Board</span>
+        <span class="crumb">/ User Stories</span>
       </div>
       <div class="top-actions">
-        <button class="icon-btn" id="settingsBtn" aria-label="Einstellungen">⚙︎</button>
-        <button class="icon-btn" id="lockNowBtn" aria-label="Sperren">🔒</button>
+        <button class="btn primary sm hide-mobile" id="addBtnTop"><svg class="ic"><use href="#i-plus"/></svg>Neue Story</button>
+        <button class="icon-btn" id="settingsBtn" aria-label="Einstellungen" title="Einstellungen"><svg class="ic"><use href="#i-gear"/></svg></button>
+        <button class="icon-btn" id="lockNowBtn" aria-label="Sperren" title="Sperren"><svg class="ic"><use href="#i-lock"/></svg></button>
       </div>
     </header>
 
     <div class="toolbar">
-      <input id="search" type="search" placeholder="Stories durchsuchen …">
-      <select id="sort" aria-label="Sortierung">
-        <option value="manual">Manuell</option>
-        <option value="priority">Priorität</option>
-        <option value="points">Story Points</option>
-        <option value="epic">Epic</option>
-        <option value="newest">Neueste zuerst</option>
-        <option value="title">Titel A–Z</option>
-      </select>
-      <select id="epicFilter" aria-label="Epic-Filter"><option value="">Alle Epics</option></select>
+      <label class="search">
+        <svg class="ic"><use href="#i-search"/></svg>
+        <input id="search" type="search" placeholder="Suchen …" aria-label="Stories durchsuchen">
+      </label>
+      <label class="pill-select">
+        <svg class="ic"><use href="#i-sort"/></svg>
+        <select id="sort" aria-label="Sortierung">
+          <option value="manual">Manuell</option>
+          <option value="priority">Priorität</option>
+          <option value="points">Story Points</option>
+          <option value="epic">Epic</option>
+          <option value="newest">Neueste</option>
+          <option value="title">Titel A–Z</option>
+        </select>
+      </label>
+      <label class="pill-select">
+        <span class="dot" id="epicDot"></span>
+        <select id="epicFilter" aria-label="Epic-Filter"><option value="">Alle Epics</option></select>
+      </label>
+      <span class="toolbar-stats muted" id="stats"></span>
     </div>
 
     <nav class="tabs" id="tabs" aria-label="Spalten"></nav>
     <main class="board" id="board"></main>
 
-    <button class="fab" id="addBtn" aria-label="Neue Story">＋</button>
+    <button class="fab" id="addBtn" aria-label="Neue Story"><svg class="ic"><use href="#i-plus"/></svg></button>
   </div>
 
   <!-- Story-Dialog -->
-  <dialog id="storyDlg" class="sheet">
+  <dialog id="storyDlg" class="modal">
     <form method="dialog" id="storyForm">
-      <header class="sheet-head">
-        <h2 id="storyDlgTitle">Neue Story</h2>
-        <button class="icon-btn" value="cancel" formnovalidate aria-label="Schließen">✕</button>
+      <header class="modal-head">
+        <span class="modal-crumb"><span class="logo xs" data-logo></span><span id="storyDlgTitle">Neue Story</span></span>
+        <button class="icon-btn" value="cancel" formnovalidate aria-label="Schließen"><svg class="ic"><use href="#i-x"/></svg></button>
       </header>
-      <div class="sheet-body">
-        <label>Titel<input name="title" required maxlength="120" placeholder="z. B. Passwort zurücksetzen"></label>
-        <div class="story-sentence">
-          <label>Als …<input name="role" placeholder="registrierte Nutzerin"></label>
-          <label>möchte ich …<input name="want" placeholder="mein Passwort per E-Mail zurücksetzen"></label>
-          <label>damit …<input name="benefit" placeholder="ich wieder Zugang bekomme"></label>
+      <div class="modal-body">
+        <input name="title" class="title-input" required maxlength="120" placeholder="Titel der Story" autocomplete="off">
+
+        <div class="sentence-box">
+          <label class="sentence-row"><span>Als</span><input name="role" placeholder="registrierte Nutzerin" autocomplete="off"></label>
+          <label class="sentence-row"><span>möchte ich</span><input name="want" placeholder="mein Passwort per E-Mail zurücksetzen" autocomplete="off"></label>
+          <label class="sentence-row"><span>damit</span><input name="benefit" placeholder="ich wieder Zugang bekomme" autocomplete="off"></label>
         </div>
-        <label>Akzeptanzkriterien <small class="muted">(eine Zeile pro Kriterium)</small>
-          <textarea name="criteria" rows="4" placeholder="Link ist 24 h gültig&#10;Bestätigung per E-Mail"></textarea>
+
+        <label class="field">
+          <span class="field-label">Akzeptanzkriterien <span class="muted">· eine Zeile pro Kriterium</span></span>
+          <textarea name="criteria" class="input" rows="4" placeholder="Link ist 24 h gültig&#10;Bestätigung per E-Mail"></textarea>
         </label>
-        <div class="grid3">
-          <label>Priorität
-            <select name="priority">
+
+        <div class="props">
+          <label class="prop"><span class="prop-ic" id="propPrioIc"></span>
+            <select name="priority" aria-label="Priorität">
               <option value="must">Must have</option>
               <option value="should">Should have</option>
               <option value="could" selected>Could have</option>
               <option value="wont">Won't have</option>
             </select>
           </label>
-          <label>Points
-            <select name="points">
-              <option value="">–</option><option>1</option><option>2</option><option>3</option>
+          <label class="prop"><span class="prop-ic" id="propColIc"></span><select name="column" id="columnSelect" aria-label="Spalte"></select></label>
+          <label class="prop"><span class="prop-txt">SP</span>
+            <select name="points" aria-label="Story Points">
+              <option value="">Keine Points</option><option>1</option><option>2</option><option>3</option>
               <option>5</option><option>8</option><option>13</option><option>21</option>
             </select>
           </label>
-          <label>Spalte<select name="column" id="columnSelect"></select></label>
+          <label class="prop epic-prop"><span class="dot" id="propEpicDot"></span><input name="epic" list="epicList" placeholder="Epic" autocomplete="off" aria-label="Epic"></label>
+          <datalist id="epicList"></datalist>
         </div>
-        <label>Epic<input name="epic" list="epicList" placeholder="z. B. Onboarding"></label>
-        <datalist id="epicList"></datalist>
       </div>
-      <footer class="sheet-foot">
-        <button class="btn danger" type="button" id="deleteStoryBtn" hidden>Löschen</button>
+      <footer class="modal-foot">
+        <button class="btn ghost danger" type="button" id="deleteStoryBtn" hidden>Löschen</button>
         <span class="spacer"></span>
         <button class="btn" value="cancel" formnovalidate>Abbrechen</button>
         <button class="btn primary" value="save">Speichern</button>
@@ -102,46 +137,72 @@
   </dialog>
 
   <!-- Einstellungen -->
-  <dialog id="settingsDlg" class="sheet">
+  <dialog id="settingsDlg" class="modal">
     <form method="dialog" id="settingsForm">
-      <header class="sheet-head">
-        <h2>Einstellungen</h2>
-        <button class="icon-btn" value="cancel" formnovalidate aria-label="Schließen">✕</button>
+      <header class="modal-head">
+        <span class="modal-crumb"><span class="logo xs" data-logo></span>Einstellungen</span>
+        <button class="icon-btn" value="cancel" formnovalidate aria-label="Schließen"><svg class="ic"><use href="#i-x"/></svg></button>
       </header>
-      <div class="sheet-body">
-        <h3>Erscheinungsbild</h3>
-        <label>Name des Produkts<input name="appName" maxlength="40"></label>
-        <div class="row">
-          <label class="grow">Primärfarbe
-            <input name="color" type="color">
-          </label>
-          <div class="swatches" id="swatches"></div>
-        </div>
-        <div class="row logo-row">
-          <div class="logo big" id="logoPreview"></div>
-          <div class="grow">
-            <label class="btn file-btn">Logo hochladen<input type="file" id="logoInput" accept="image/*" hidden></label>
-            <button class="btn" type="button" id="logoReset">Logo entfernen</button>
+      <div class="modal-body">
+        <section class="set-group">
+          <h3>Erscheinungsbild</h3>
+          <div class="set-card">
+            <label class="set-row">
+              <span><b>Produktname</b><small>Erscheint in der Kopfzeile und im Browser-Tab</small></span>
+              <input name="appName" class="input" maxlength="40">
+            </label>
+            <div class="set-row">
+              <span><b>Primärfarbe</b><small>Buttons, Markierungen, Fokus</small></span>
+              <div class="color-pick">
+                <div class="swatches" id="swatches"></div>
+                <label class="color-input" title="Eigene Farbe"><input name="color" type="color"></label>
+              </div>
+            </div>
+            <div class="set-row">
+              <span><b>Logo</b><small>PNG, JPG oder SVG, wird auf 256 px verkleinert</small></span>
+              <div class="logo-pick">
+                <div class="logo lg" id="logoPreview"></div>
+                <label class="btn sm">Hochladen<input type="file" id="logoInput" accept="image/*" hidden></label>
+                <button class="btn sm ghost" type="button" id="logoReset">Entfernen</button>
+              </div>
+            </div>
           </div>
-        </div>
+        </section>
 
-        <h3>Spalten</h3>
-        <p class="muted small">Eine Spalte pro Zeile. Stories in gelöschten Spalten landen in der ersten Spalte.</p>
-        <textarea name="columns" rows="6" style="min-height:9rem"></textarea>
+        <section class="set-group">
+          <h3>Spalten</h3>
+          <div class="set-card">
+            <label class="set-row stack">
+              <span><b>Workflow</b><small>Eine Spalte pro Zeile. Stories aus gelöschten Spalten landen in der ersten.</small></span>
+              <textarea name="columns" class="input" rows="6"></textarea>
+            </label>
+          </div>
+        </section>
 
-        <h3>Passwort</h3>
-        <label>Neues Passwort <small class="muted">(leer lassen = unverändert; meldet andere Geräte ab)</small>
-          <input name="newPw" type="password" autocomplete="new-password">
-        </label>
+        <section class="set-group">
+          <h3>Sicherheit</h3>
+          <div class="set-card">
+            <label class="set-row">
+              <span><b>Neues Passwort</b><small>Leer lassen = unverändert. Meldet andere Geräte ab.</small></span>
+              <input name="newPw" class="input" type="password" autocomplete="new-password">
+            </label>
+          </div>
+        </section>
 
-        <h3>Daten</h3>
-        <p class="muted small">Alle Daten liegen in der Datenbank. Der Export ist ein JSON-Backup; ein Import ersetzt das komplette Board.</p>
-        <div class="row wrap">
-          <a class="btn" id="exportBtn" href="api/export" download>Exportieren</a>
-          <label class="btn file-btn">Importieren<input type="file" id="importInput" accept="application/json" hidden></label>
-        </div>
+        <section class="set-group">
+          <h3>Daten</h3>
+          <div class="set-card">
+            <div class="set-row">
+              <span><b>Backup</b><small>JSON-Export. Ein Import ersetzt das komplette Board.</small></span>
+              <div class="logo-pick">
+                <a class="btn sm" id="exportBtn" href="api/export" download>Exportieren</a>
+                <label class="btn sm">Importieren<input type="file" id="importInput" accept="application/json" hidden></label>
+              </div>
+            </div>
+          </div>
+        </section>
       </div>
-      <footer class="sheet-foot">
+      <footer class="modal-foot">
         <span class="spacer"></span>
         <button class="btn" value="cancel" formnovalidate>Abbrechen</button>
         <button class="btn primary" value="save">Speichern</button>
