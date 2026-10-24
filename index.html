@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#4f46e5">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <title>Story Board</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Passwort-Sperre -->
+  <section id="lock" class="lock" hidden>
+    <form id="lockForm" class="lock-card">
+      <div class="lock-logo" id="lockLogo"></div>
+      <h1 id="lockTitle">Story Board</h1>
+      <p id="lockHint" class="muted">Bitte Passwort eingeben</p>
+      <input id="lockPw" type="password" autocomplete="current-password" placeholder="Passwort" required>
+      <input id="lockPw2" type="password" autocomplete="new-password" placeholder="Passwort wiederholen" hidden>
+      <p id="lockError" class="error" hidden></p>
+      <button class="btn primary" type="submit" id="lockBtn">Entsperren</button>
+    </form>
+  </section>
+
+  <!-- App -->
+  <div id="app" hidden>
+    <header class="topbar">
+      <div class="brand">
+        <div class="logo" id="logo"></div>
+        <span id="appName">Story Board</span>
+      </div>
+      <div class="top-actions">
+        <button class="icon-btn" id="settingsBtn" aria-label="Einstellungen">⚙︎</button>
+        <button class="icon-btn" id="lockNowBtn" aria-label="Sperren">🔒</button>
+      </div>
+    </header>
+
+    <div class="toolbar">
+      <input id="search" type="search" placeholder="Stories durchsuchen …">
+      <select id="sort" aria-label="Sortierung">
+        <option value="manual">Manuell</option>
+        <option value="priority">Priorität</option>
+        <option value="points">Story Points</option>
+        <option value="epic">Epic</option>
+        <option value="newest">Neueste zuerst</option>
+        <option value="title">Titel A–Z</option>
+      </select>
+      <select id="epicFilter" aria-label="Epic-Filter"><option value="">Alle Epics</option></select>
+    </div>
+
+    <nav class="tabs" id="tabs" aria-label="Spalten"></nav>
+    <main class="board" id="board"></main>
+
+    <button class="fab" id="addBtn" aria-label="Neue Story">＋</button>
+  </div>
+
+  <!-- Story-Dialog -->
+  <dialog id="storyDlg" class="sheet">
+    <form method="dialog" id="storyForm">
+      <header class="sheet-head">
+        <h2 id="storyDlgTitle">Neue Story</h2>
+        <button class="icon-btn" value="cancel" formnovalidate aria-label="Schließen">✕</button>
+      </header>
+      <div class="sheet-body">
+        <label>Titel<input name="title" required maxlength="120" placeholder="z. B. Passwort zurücksetzen"></label>
+        <div class="story-sentence">
+          <label>Als …<input name="role" placeholder="registrierte Nutzerin"></label>
+          <label>möchte ich …<input name="want" placeholder="mein Passwort per E-Mail zurücksetzen"></label>
+          <label>damit …<input name="benefit" placeholder="ich wieder Zugang bekomme"></label>
+        </div>
+        <label>Akzeptanzkriterien <small class="muted">(eine Zeile pro Kriterium)</small>
+          <textarea name="criteria" rows="4" placeholder="Link ist 24 h gültig&#10;Bestätigung per E-Mail"></textarea>
+        </label>
+        <div class="grid3">
+          <label>Priorität
+            <select name="priority">
+              <option value="must">Must have</option>
+              <option value="should">Should have</option>
+              <option value="could" selected>Could have</option>
+              <option value="wont">Won't have</option>
+            </select>
+          </label>
+          <label>Points
+            <select name="points">
+              <option value="">–</option><option>1</option><option>2</option><option>3</option>
+              <option>5</option><option>8</option><option>13</option><option>21</option>
+            </select>
+          </label>
+          <label>Spalte<select name="column" id="columnSelect"></select></label>
+        </div>
+        <label>Epic<input name="epic" list="epicList" placeholder="z. B. Onboarding"></label>
+        <datalist id="epicList"></datalist>
+      </div>
+      <footer class="sheet-foot">
+        <button class="btn danger" type="button" id="deleteStoryBtn" hidden>Löschen</button>
+        <span class="spacer"></span>
+        <button class="btn" value="cancel" formnovalidate>Abbrechen</button>
+        <button class="btn primary" value="save">Speichern</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <!-- Einstellungen -->
+  <dialog id="settingsDlg" class="sheet">
+    <form method="dialog" id="settingsForm">
+      <header class="sheet-head">
+        <h2>Einstellungen</h2>
+        <button class="icon-btn" value="cancel" formnovalidate aria-label="Schließen">✕</button>
+      </header>
+      <div class="sheet-body">
+        <h3>Erscheinungsbild</h3>
+        <label>Name des Produkts<input name="appName" maxlength="40"></label>
+        <div class="row">
+          <label class="grow">Primärfarbe
+            <input name="color" type="color">
+          </label>
+          <div class="swatches" id="swatches"></div>
+        </div>
+        <div class="row logo-row">
+          <div class="logo big" id="logoPreview"></div>
+          <div class="grow">
+            <label class="btn file-btn">Logo hochladen<input type="file" id="logoInput" accept="image/*" hidden></label>
+            <button class="btn" type="button" id="logoReset">Logo entfernen</button>
+          </div>
+        </div>
+
+        <h3>Spalten</h3>
+        <p class="muted small">Eine Spalte pro Zeile. Stories in gelöschten Spalten landen in der ersten Spalte.</p>
+        <textarea name="columns" rows="6" style="min-height:9rem"></textarea>
+
+        <h3>Passwort</h3>
+        <label>Neues Passwort <small class="muted">(leer lassen = unverändert)</small>
+          <input name="newPw" type="password" autocomplete="new-password">
+        </label>
+
+        <h3>Daten</h3>
+        <p class="muted small">Die Daten liegen nur in diesem Browser. Mit Export/Import kannst du sie sichern oder auf ein anderes Gerät übertragen.</p>
+        <div class="row wrap">
+          <button class="btn" type="button" id="exportBtn">Exportieren</button>
+          <label class="btn file-btn">Importieren<input type="file" id="importInput" accept="application/json" hidden></label>
+          <button class="btn danger" type="button" id="resetBtn">Alles zurücksetzen</button>
+        </div>
+      </div>
+      <footer class="sheet-foot">
+        <span class="spacer"></span>
+        <button class="btn" value="cancel" formnovalidate>Abbrechen</button>
+        <button class="btn primary" value="save">Speichern</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <div id="toast" class="toast" hidden></div>
+  <script src="app.js"></script>
+</body>
+</html>
