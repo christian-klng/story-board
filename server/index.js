@@ -243,7 +243,12 @@ app.post('/api/import', express.json({ limit: '10mb' }), wrap(async (req, res) =
 }));
 
 // ---------- Frontend ----------
-app.use(express.static(path.join(__dirname, '..', 'public'), { index: 'index.html', maxAge: '1h' }));
+// "no-cache" = Browser darf speichern, fragt aber bei jedem Laden per ETag nach (meist 304, kaum Traffic).
+// So passen HTML, CSS und JS nach einem Deploy immer zusammen.
+app.use(express.static(path.join(__dirname, '..', 'public'), {
+  index: 'index.html',
+  setHeaders: (res) => res.set('Cache-Control', 'no-cache'),
+}));
 
 app.use((err, req, res, next) => {
   if (err.status && err.status < 500) return res.status(err.status).json({ error: err.message });
