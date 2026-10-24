@@ -50,6 +50,7 @@ body {
   color: var(--text); padding: .6rem 1rem; border-radius: 10px; font: inherit;
   font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: .4rem;
 }
+a.btn { text-decoration: none; }
 .btn.primary { background: var(--primary); border-color: var(--primary); color: var(--primary-ink); }
 .btn.danger { color: var(--danger); }
 .icon-btn {

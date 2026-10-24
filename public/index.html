@@ -18,7 +18,6 @@
       <h1 id="lockTitle">Story Board</h1>
       <p id="lockHint" class="muted">Bitte Passwort eingeben</p>
       <input id="lockPw" type="password" autocomplete="current-password" placeholder="Passwort" required>
-      <input id="lockPw2" type="password" autocomplete="new-password" placeholder="Passwort wiederholen" hidden>
       <p id="lockError" class="error" hidden></p>
       <button class="btn primary" type="submit" id="lockBtn">Entsperren</button>
     </form>
@@ -131,16 +130,15 @@
         <textarea name="columns" rows="6" style="min-height:9rem"></textarea>
 
         <h3>Passwort</h3>
-        <label>Neues Passwort <small class="muted">(leer lassen = unverändert)</small>
+        <label>Neues Passwort <small class="muted">(leer lassen = unverändert; meldet andere Geräte ab)</small>
           <input name="newPw" type="password" autocomplete="new-password">
         </label>
 
         <h3>Daten</h3>
-        <p class="muted small">Die Daten liegen nur in diesem Browser. Mit Export/Import kannst du sie sichern oder auf ein anderes Gerät übertragen.</p>
+        <p class="muted small">Alle Daten liegen in der Datenbank. Der Export ist ein JSON-Backup; ein Import ersetzt das komplette Board.</p>
         <div class="row wrap">
-          <button class="btn" type="button" id="exportBtn">Exportieren</button>
+          <a class="btn" id="exportBtn" href="api/export" download>Exportieren</a>
           <label class="btn file-btn">Importieren<input type="file" id="importInput" accept="application/json" hidden></label>
-          <button class="btn danger" type="button" id="resetBtn">Alles zurücksetzen</button>
         </div>
       </div>
       <footer class="sheet-foot">

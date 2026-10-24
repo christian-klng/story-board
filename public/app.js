@@ -1,10 +1,7 @@
-/* Story Board – User-Story-Übersicht ohne Backend.
-   Alle Daten liegen im localStorage dieses Browsers. */
+/* Story Board – Frontend. Daten kommen über die REST-API aus Postgres. */
 (() => {
   'use strict';
 
-  const KEY = 'storyboard.v1';
-  const SESSION_KEY = 'storyboard.unlocked';
   const PRIO = {
     must:   { label: 'Must',   rank: 0, color: 'var(--must)' },
     should: { label: 'Should', rank: 1, color: 'var(--should)' },
@@ -12,100 +9,77 @@
     wont:   { label: "Won't",  rank: 3, color: 'var(--wont)' },
   };
   const SWATCHES = ['#4f46e5', '#0ea5e9', '#10b981', '#f59e0b', '#ef4444', '#ec4899', '#111827'];
+  const DEFAULT_SETTINGS = { appName: 'Story Board', color: '#4f46e5', logo: '' };
 
   const $ = (s, el = document) => el.querySelector(s);
-  const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-  // ---------- Daten ----------
-  const defaults = () => {
-    const cols = [
-      { id: uid(), name: 'Backlog' },
-      { id: uid(), name: 'Bereit' },
-      { id: uid(), name: 'In Arbeit' },
-      { id: uid(), name: 'Review' },
-      { id: uid(), name: 'Fertig' },
-    ];
-    const now = Date.now();
-    const s = (title, role, want, benefit, priority, points, epic, col, criteria = []) => ({
-      id: uid(), title, role, want, benefit, priority, points, epic, column: cols[col].id,
-      criteria, created: now - Math.random() * 1e8,
+  let state = { settings: { ...DEFAULT_SETTINGS }, columns: [], stories: [] };
+
+  // ---------- API ----------
+  async function api(method, url, body) {
+    const res = await fetch(url, {
+      method,
+      headers: body !== undefined ? { 'Content-Type': 'application/json' } : {},
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+      credentials: 'same-origin',
     });
-    return {
-      settings: { appName: 'Story Board', color: '#4f46e5', logo: '', pwHash: '' },
-      columns: cols,
-      stories: [
-        s('Konto anlegen', 'neue Nutzerin', 'mich mit E-Mail und Passwort registrieren', 'ich das Produkt nutzen kann', 'must', 3, 'Onboarding', 0, ['Bestätigungsmail wird versendet', 'Passwort mind. 8 Zeichen']),
-        s('Passwort zurücksetzen', 'registrierter Nutzer', 'mein Passwort per E-Mail zurücksetzen', 'ich wieder Zugang bekomme', 'should', 2, 'Onboarding', 1, ['Link ist 24 h gültig']),
-        s('Dashboard-Übersicht', 'Teamleiterin', 'die wichtigsten Kennzahlen auf einen Blick sehen', 'ich schnell entscheiden kann', 'must', 8, 'Reporting', 2),
-        s('Export als CSV', 'Analyst', 'Daten als CSV exportieren', 'ich sie in Excel weiterverarbeiten kann', 'could', 3, 'Reporting', 0),
-        s('Dunkelmodus', 'Nutzer', 'einen dunklen Modus aktivieren', 'die App abends angenehmer ist', 'wont', 2, 'UI', 0),
-        s('Profilbild hochladen', 'Nutzerin', 'ein Profilbild hochladen', 'mein Team mich erkennt', 'could', 2, 'Profil', 4),
-      ],
-    };
-  };
-
-  let state;
-  const load = () => {
-    try { state = JSON.parse(localStorage.getItem(KEY)); } catch { state = null; }
-    if (!state || !Array.isArray(state.columns) || !Array.isArray(state.stories)) state = defaults();
-    state.settings = { ...defaults().settings, ...state.settings };
-  };
-  const save = () => {
-    try { localStorage.setItem(KEY, JSON.stringify(state)); }
-    catch { toast('Speichern fehlgeschlagen – evtl. ist das Logo zu groß.'); }
-  };
-
-  // ---------- Passwort ----------
-  async function hash(pw) {
-    const data = new TextEncoder().encode('storyboard:' + pw);
-    if (crypto?.subtle) {
-      const buf = await crypto.subtle.digest('SHA-256', data);
-      return [...new Uint8Array(buf)].map((b) => b.toString(16).padStart(2, '0')).join('');
-    }
-    let h = 5381; for (const b of data) h = ((h << 5) + h + b) | 0; // Fallback ohne WebCrypto
-    return 'djb2-' + (h >>> 0).toString(16);
+    const data = await res.json().catch(() => ({}));
+    if (res.status === 401 && url !== 'api/login') { showLock(); throw new Error('Nicht angemeldet'); }
+    if (!res.ok) throw new Error(data.error || `Fehler ${res.status}`);
+    return data;
   }
 
-  function showLock() {
-    const firstRun = !state.settings.pwHash;
+  // Fehler anzeigen und Board neu laden, damit die Ansicht wieder dem Server entspricht
+  async function safely(fn) {
+    try { await fn(); } catch (e) {
+      if (e.message !== 'Nicht angemeldet') { toast(e.message); await reload().catch(() => {}); }
+    }
+  }
+
+  async function reload() {
+    state = await api('GET', 'api/board');
+    render();
+  }
+
+  // ---------- Sperre ----------
+  function showLock(configured = true) {
     $('#app').hidden = true;
     $('#lock').hidden = false;
+    document.querySelectorAll('dialog[open]').forEach((d) => d.close());
     $('#lockTitle').textContent = state.settings.appName;
-    $('#lockHint').textContent = firstRun ? 'Lege ein Passwort für dieses Board fest.' : 'Bitte Passwort eingeben';
-    $('#lockPw2').hidden = !firstRun;
-    $('#lockPw2').required = firstRun;
-    $('#lockPw').autocomplete = firstRun ? 'new-password' : 'current-password';
-    $('#lockBtn').textContent = firstRun ? 'Passwort festlegen' : 'Entsperren';
+    $('#lockHint').textContent = configured ? 'Bitte Passwort eingeben' : 'Es ist noch kein Passwort konfiguriert. Bitte APP_PASSWORD in Coolify setzen.';
+    $('#lockPw').disabled = $('#lockBtn').disabled = !configured;
     $('#lockError').hidden = true;
-    $('#lockPw').value = $('#lockPw2').value = '';
+    $('#lockPw').value = '';
     setTimeout(() => $('#lockPw').focus(), 50);
   }
 
   $('#lockForm').addEventListener('submit', async (e) => {
     e.preventDefault();
-    const pw = $('#lockPw').value;
-    const err = (m) => { $('#lockError').textContent = m; $('#lockError').hidden = false; };
-    if (!state.settings.pwHash) {
-      if (pw.length < 4) return err('Mindestens 4 Zeichen.');
-      if (pw !== $('#lockPw2').value) return err('Passwörter stimmen nicht überein.');
-      state.settings.pwHash = await hash(pw);
-      save();
-    } else if (await hash(pw) !== state.settings.pwHash) {
+    $('#lockBtn').disabled = true;
+    try {
+      await api('POST', 'api/login', { password: $('#lockPw').value });
+      await unlock();
+    } catch (err) {
       $('#lockPw').value = '';
-      return err('Falsches Passwort.');
+      $('#lockError').textContent = err.message;
+      $('#lockError').hidden = false;
+    } finally {
+      $('#lockBtn').disabled = false;
     }
-    sessionStorage.setItem(SESSION_KEY, state.settings.pwHash);
-    unlock();
   });
 
-  function unlock() {
+  async function unlock() {
+    await reload();
     $('#lock').hidden = true;
     $('#app').hidden = false;
-    render();
   }
 
-  $('#lockNowBtn').addEventListener('click', () => { sessionStorage.removeItem(SESSION_KEY); showLock(); });
+  $('#lockNowBtn').addEventListener('click', async () => {
+    await api('POST', 'api/logout').catch(() => {});
+    showLock();
+  });
 
   // ---------- Branding ----------
   function inkFor(hex) {
@@ -113,8 +87,7 @@
     const [r, g, b] = [n >> 16, (n >> 8) & 255, n & 255].map((v) => {
       v /= 255; return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
     });
-    const L = 0.2126 * r + 0.7152 * g + 0.0722 * b;
-    return L > 0.45 ? '#111827' : '#ffffff';
+    return 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.45 ? '#111827' : '#ffffff';
   }
   function logoHTML(s) {
     return s.logo ? `<img src="${esc(s.logo)}" alt="">` : esc((s.appName || '?').trim().charAt(0).toUpperCase());
@@ -126,12 +99,14 @@
     $('meta[name=theme-color]').content = s.color;
     document.title = s.appName;
     $('#appName').textContent = s.appName;
+    $('#lockTitle').textContent = s.appName;
     for (const el of [$('#logo'), $('#lockLogo')]) el.innerHTML = logoHTML(s);
   }
 
   // ---------- Rendering ----------
   let activeCol = 0;
   const ui = { search: '', sort: 'manual', epic: '' };
+  const byPosition = (a, b) => a.position - b.position;
 
   function visibleStories(colId) {
     const q = ui.search.toLowerCase();
@@ -139,14 +114,14 @@
       (!ui.epic || s.epic === ui.epic) &&
       (!q || [s.title, s.role, s.want, s.benefit, s.epic, ...(s.criteria || [])].join(' ').toLowerCase().includes(q)));
     const by = {
+      manual: byPosition,
       priority: (a, b) => PRIO[a.priority].rank - PRIO[b.priority].rank || (b.points || 0) - (a.points || 0),
       points: (a, b) => (b.points || 0) - (a.points || 0),
       epic: (a, b) => (a.epic || '~').localeCompare(b.epic || '~', 'de') || PRIO[a.priority].rank - PRIO[b.priority].rank,
       newest: (a, b) => b.created - a.created,
       title: (a, b) => a.title.localeCompare(b.title, 'de'),
     }[ui.sort];
-    if (by) list = [...list].sort(by);
-    return list;
+    return [...list].sort(by);
   }
 
   function cardHTML(s, ci, idx, len) {
@@ -155,7 +130,7 @@
       ? `<p class="sentence">Als <b>${esc(s.role || '…')}</b> möchte ich <b>${esc(s.want || '…')}</b>${s.benefit ? `, damit ${esc(s.benefit)}` : ''}.</p>` : '';
     const ac = (s.criteria || []).length;
     const manual = ui.sort === 'manual';
-    return `<article class="card" draggable="true" data-id="${s.id}" style="--prio:${p.color}">
+    return `<article class="card" draggable="true" data-id="${esc(s.id)}" style="--prio:${p.color}">
       <h4>${esc(s.title)}</h4>${sentence}
       <div class="meta">
         <span class="chip prio">${p.label}</span>
@@ -174,14 +149,14 @@
 
   function render() {
     applyBranding();
-    activeCol = Math.min(activeCol, state.columns.length - 1);
+    activeCol = Math.max(0, Math.min(activeCol, state.columns.length - 1));
     const board = $('#board');
     const scrollPos = board.scrollLeft;
 
     board.innerHTML = state.columns.map((c, ci) => {
       const list = visibleStories(c.id);
       const pts = list.reduce((a, s) => a + (+s.points || 0), 0);
-      return `<section class="column" data-col="${c.id}">
+      return `<section class="column" data-col="${esc(c.id)}">
         <div class="col-head"><span>${esc(c.name)} ${pts ? `<span class="col-points">· ${pts} SP</span>` : ''}</span><span class="count">${list.length}</span></div>
         ${list.length ? list.map((s, i) => cardHTML(s, ci, i, list.length)).join('') : '<div class="empty">Keine Stories</div>'}
       </section>`;
@@ -225,17 +200,16 @@
   $('#epicFilter').addEventListener('change', (e) => { ui.epic = e.target.value; render(); });
 
   // ---------- Verschieben ----------
+  // Sofort lokal anzeigen, dann speichern (bei Fehler wird neu geladen)
   function moveStory(id, toColId, beforeId = null) {
-    const i = state.stories.findIndex((s) => s.id === id);
-    const [s] = state.stories.splice(i, 1);
+    const s = state.stories.find((x) => x.id === id);
+    const target = state.stories.filter((x) => x.column === toColId && x.id !== id).sort(byPosition);
+    const at = beforeId ? target.findIndex((x) => x.id === beforeId) : -1;
+    target.splice(at < 0 ? target.length : at, 0, s);
     s.column = toColId;
-    let at = beforeId ? state.stories.findIndex((x) => x.id === beforeId) : -1;
-    if (at < 0) { // ans Ende der Zielspalte
-      at = state.stories.length;
-      for (let k = state.stories.length - 1; k >= 0; k--) if (state.stories[k].column === toColId) { at = k + 1; break; }
-    }
-    state.stories.splice(at, 0, s);
-    save(); render();
+    target.forEach((x, i) => { x.position = i; });
+    render();
+    return safely(() => api('POST', `api/stories/${encodeURIComponent(id)}/move`, { column: toColId, before: beforeId }));
   }
 
   $('#board').addEventListener('click', (e) => {
@@ -252,7 +226,8 @@
       const target = state.columns[ci + (dir === 'left' ? -1 : 1)];
       if (target) moveStory(id, target.id);
     } else {
-      const list = visibleStories(s.column);
+      // Reihenfolge bezieht sich auf alle Stories der Spalte, nicht nur die gefilterten
+      const list = state.stories.filter((x) => x.column === s.column).sort(byPosition);
       const idx = list.findIndex((x) => x.id === id);
       if (dir === 'up' && idx > 0) moveStory(id, s.column, list[idx - 1].id);
       if (dir === 'down' && idx < list.length - 1) moveStory(id, s.column, list[idx + 2]?.id || null);
@@ -299,7 +274,7 @@
       : { title: '', role: '', want: '', benefit: '', criteria: [], priority: 'could', points: '', epic: ui.epic, column: state.columns[activeCol]?.id };
     $('#storyDlgTitle').textContent = id ? 'Story bearbeiten' : 'Neue Story';
     $('#deleteStoryBtn').hidden = !id;
-    $('#columnSelect').innerHTML = state.columns.map((c) => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+    $('#columnSelect').innerHTML = state.columns.map((c) => `<option value="${esc(c.id)}">${esc(c.name)}</option>`).join('');
     for (const k of ['title', 'role', 'want', 'benefit', 'priority', 'epic', 'column']) f.elements[k].value = s[k] ?? '';
     f.elements.points.value = s.points ? String(s.points) : '';
     f.elements.criteria.value = (s.criteria || []).join('\n');
@@ -315,23 +290,33 @@
       criteria: f.criteria.value.split('\n').map((l) => l.trim()).filter(Boolean),
       priority: f.priority.value, points: f.points.value ? +f.points.value : '', epic: f.epic.value.trim(),
     };
+    const column = f.column.value;
     if (!data.title) return;
-    if (editingId) {
-      const s = state.stories.find((x) => x.id === editingId);
-      Object.assign(s, data);
-      if (s.column !== f.column.value) return moveStory(s.id, f.column.value);
-      save();
-    } else {
-      state.stories.push({ id: uid(), created: Date.now(), column: f.column.value, ...data });
-      save();
-      toast('Story angelegt');
-    }
-    render();
+    const id = editingId;
+    safely(async () => {
+      if (id) {
+        const updated = await api('PATCH', `api/stories/${encodeURIComponent(id)}`, data);
+        const s = state.stories.find((x) => x.id === id);
+        const oldCol = s.column;
+        Object.assign(s, updated, { column: oldCol });
+        if (oldCol !== column) await moveStory(id, column);
+        else render();
+      } else {
+        const created = await api('POST', 'api/stories', { ...data, column });
+        state.stories.push(created);
+        render();
+        toast('Story angelegt');
+      }
+    });
   });
+
   $('#deleteStoryBtn').addEventListener('click', () => {
     if (!confirm('Diese Story wirklich löschen?')) return;
-    state.stories = state.stories.filter((s) => s.id !== editingId);
-    save(); storyDlg.close('deleted'); render(); toast('Story gelöscht');
+    const id = editingId;
+    storyDlg.close('deleted');
+    state.stories = state.stories.filter((s) => s.id !== id);
+    render();
+    safely(async () => { await api('DELETE', `api/stories/${encodeURIComponent(id)}`); toast('Story gelöscht'); });
   });
 
   // ---------- Einstellungen ----------
@@ -369,7 +354,7 @@
     if (!file) return;
     const img = new Image();
     const url = URL.createObjectURL(file);
-    img.onload = () => { // auf 256 px verkleinern, damit es in den Speicher passt
+    img.onload = () => { // auf 256 px verkleinern, damit es schlank in der Datenbank liegt
       const max = 256, r = Math.min(1, max / Math.max(img.width, img.height));
       const cv = document.createElement('canvas');
       cv.width = Math.round(img.width * r); cv.height = Math.round(img.height * r);
@@ -382,61 +367,78 @@
   });
   $('#logoReset').addEventListener('click', () => { draft.logo = ''; previewDraft(); });
 
-  setDlg.addEventListener('close', async () => {
+  // Spaltennamen aus dem Textfeld den bestehenden IDs zuordnen (gleicher Name oder gleiche Position = Umbenennung)
+  function columnPayload(text) {
+    const names = text.split('\n').map((l) => l.trim()).filter(Boolean);
+    const old = state.columns;
+    const used = new Set();
+    return names.map((name, i) => {
+      let match = old.find((c) => c.name === name && !used.has(c.id));
+      if (!match && old[i] && !used.has(old[i].id) && !names.includes(old[i].name)) match = old[i];
+      if (match) used.add(match.id);
+      return { id: match?.id, name };
+    });
+  }
+
+  setDlg.addEventListener('close', () => {
     if (setDlg.returnValue !== 'save') { applyBranding(); return; }
     const f = $('#settingsForm').elements;
-    // Spalten abgleichen (nach Name, damit IDs erhalten bleiben)
-    const names = f.columns.value.split('\n').map((l) => l.trim()).filter(Boolean);
-    if (names.length) {
-      const old = [...state.columns];
-      state.columns = names.map((n, i) => old.find((c) => c.name === n) || (old[i] && !names.includes(old[i].name) ? { ...old[i], name: n } : { id: uid(), name: n }));
-      const ids = new Set(state.columns.map((c) => c.id));
-      state.stories.forEach((s) => { if (!ids.has(s.column)) s.column = state.columns[0].id; });
-    }
-    if (f.newPw.value) {
-      if (f.newPw.value.length < 4) toast('Passwort zu kurz – nicht geändert.');
-      else { draft.pwHash = await hash(f.newPw.value); sessionStorage.setItem(SESSION_KEY, draft.pwHash); toast('Passwort geändert'); }
-    }
+    const columns = columnPayload(f.columns.value);
+    const columnsChanged = JSON.stringify(columns) !== JSON.stringify(state.columns.map(({ id, name }) => ({ id, name })));
+    const newPw = f.newPw.value;
     state.settings = { ...draft };
-    save(); render();
+    render();
+    safely(async () => {
+      state.settings = await api('PUT', 'api/settings', draft);
+      if (columns.length && columnsChanged) state = await api('PUT', 'api/columns', columns);
+      if (newPw) {
+        if (newPw.length < 4) toast('Passwort zu kurz – nicht geändert.');
+        else { await api('PUT', 'api/password', { password: newPw }); toast('Passwort geändert'); }
+      }
+      render();
+    });
   });
 
-  $('#exportBtn').addEventListener('click', () => {
-    const data = { ...state, settings: { ...state.settings, pwHash: undefined } };
-    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `${(state.settings.appName || 'storyboard').replace(/\W+/g, '-').toLowerCase()}-${new Date().toISOString().slice(0, 10)}.json`;
-    a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 1000);
-  });
   $('#importInput').addEventListener('change', async (e) => {
     const file = e.target.files[0]; e.target.value = '';
     if (!file) return;
-    try {
-      const data = JSON.parse(await file.text());
-      if (!Array.isArray(data.columns) || !Array.isArray(data.stories)) throw new Error();
-      if (!confirm('Aktuelle Daten durch den Import ersetzen?')) return;
-      const pwHash = state.settings.pwHash;
-      state = { ...data, settings: { ...defaults().settings, ...data.settings, pwHash } };
-      save(); setDlg.close('imported'); render(); toast('Import erfolgreich');
-    } catch { toast('Ungültige Datei'); }
-  });
-  $('#resetBtn').addEventListener('click', () => {
-    if (!confirm('Wirklich alle Stories, Einstellungen und das Passwort löschen?')) return;
-    localStorage.removeItem(KEY); sessionStorage.removeItem(SESSION_KEY);
-    location.reload();
+    let data;
+    try { data = JSON.parse(await file.text()); } catch { return toast('Ungültige Datei'); }
+    if (!confirm('Das komplette Board durch den Import ersetzen?')) return;
+    safely(async () => {
+      state = await api('POST', 'api/import', data);
+      setDlg.close('imported');
+      render();
+      toast('Import erfolgreich');
+    });
   });
 
   // ---------- Toast ----------
   let toastT;
   function toast(msg) {
     const t = $('#toast'); t.textContent = msg; t.hidden = false;
-    clearTimeout(toastT); toastT = setTimeout(() => (t.hidden = true), 2200);
+    clearTimeout(toastT); toastT = setTimeout(() => (t.hidden = true), 2600);
   }
 
+  // Beim Zurückkehren in die App (z. B. Handy) frische Daten holen
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && !$('#app').hidden && !document.querySelector('dialog[open]')) {
+      reload().catch(() => {});
+    }
+  });
+
   // ---------- Start ----------
-  load();
-  applyBranding();
-  if (state.settings.pwHash && sessionStorage.getItem(SESSION_KEY) === state.settings.pwHash) unlock();
-  else showLock();
+  (async () => {
+    try {
+      const s = await api('GET', 'api/session');
+      state.settings = { ...DEFAULT_SETTINGS, ...s.branding };
+      applyBranding();
+      if (s.authed) await unlock();
+      else showLock(s.configured);
+    } catch {
+      showLock();
+      $('#lockError').textContent = 'Server nicht erreichbar.';
+      $('#lockError').hidden = false;
+    }
+  })();
 })();

@@ -1,0 +1,29 @@
+# Lokale Entwicklung: docker compose up --build  →  http://localhost:3000
+# (Für Coolify wird das Dockerfile verwendet, nicht diese Datei.)
+services:
+  app:
+    build: .
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgres://storyboard:storyboard@db:5432/storyboard
+      APP_PASSWORD: demo
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: storyboard
+      POSTGRES_PASSWORD: storyboard
+      POSTGRES_DB: storyboard
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U storyboard"]
+      interval: 5s
+      retries: 10
+
+volumes:
+  pgdata:
