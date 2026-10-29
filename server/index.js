@@ -221,6 +221,17 @@ app.post('/api/import', express.json({ limit: '10mb' }), wrap(async (req, res) =
     }
     const firstCol = idMap.values().next().value;
     const pos = {};
+    // Story-Nummern (US-n) aus dem Backup übernehmen, damit Verweise stabil bleiben.
+    // Der Zähler wird vorab hinter die höchste Nummer gesetzt; Stories ohne Nummer bekommen neue.
+    const used = new Set();
+    const numberOf = (raw) => {
+      const n = Number(raw.number);
+      if (!Number.isInteger(n) || n < 1 || n > 2_000_000_000 || used.has(n)) return null;
+      used.add(n); return n;
+    };
+    const maxNumber = Math.max(0, ...stories.map((r) => Number(r?.number)).filter((n) => Number.isInteger(n) && n > 0 && n <= 2_000_000_000));
+    const seq = "pg_get_serial_sequence('stories', 'number')";
+    if (maxNumber) await c.query(`SELECT setval(${seq}, $1)`, [maxNumber]);
     for (const raw of stories) {
       let s;
       try { s = cleanStory(raw); } catch { continue; }
@@ -228,9 +239,9 @@ app.post('/api/import', express.json({ limit: '10mb' }), wrap(async (req, res) =
       pos[colId] = (pos[colId] ?? -1) + 1;
       const created = Number(raw.created) > 0 ? new Date(Number(raw.created)) : new Date();
       await c.query(
-        `INSERT INTO stories (id, column_id, position, title, role, want, benefit, criteria, priority, points, epic, created_at)
-         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)`,
-        [randomUUID(), colId, pos[colId], s.title, s.role, s.want, s.benefit, JSON.stringify(s.criteria), s.priority, s.points, s.epic, created],
+        `INSERT INTO stories (id, column_id, position, title, role, want, benefit, criteria, priority, points, epic, created_at, number)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12, COALESCE($13::int, nextval(${seq})))`,
+        [randomUUID(), colId, pos[colId], s.title, s.role, s.want, s.benefit, JSON.stringify(s.criteria), s.priority, s.points, s.epic, created, numberOf(raw)],
       );
     }
     if (settings) {

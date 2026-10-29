@@ -206,6 +206,7 @@
         <div class="col-head">
           ${statusIcon(ci)}<span class="name">${esc(c.name)}</span><span class="count">${list.length}</span>
           <span class="end">${pts ? `<span class="pts">${pts} SP</span>` : ''}
+            <button class="icon-btn" data-export-col="${esc(c.id)}" aria-label="${esc(c.name)} als Markdown exportieren" title="Spalte als Markdown exportieren">${icon('download')}</button>
             <button class="icon-btn" data-add="${esc(c.id)}" aria-label="Story in ${esc(c.name)} anlegen" title="Story anlegen">${icon('plus')}</button></span>
         </div>
         ${list.length ? list.map((s, i) => cardHTML(s, ci, i, list.length)).join('') : '<div class="empty">Keine Stories</div>'}
@@ -271,6 +272,8 @@
   $('#board').addEventListener('click', (e) => {
     const add = e.target.closest('[data-add]');
     if (add) return openStory(null, add.dataset.add);
+    const exp = e.target.closest('[data-export-col]');
+    if (exp) return openExportMenu(exp, exp.dataset.exportCol);
     const btn = e.target.closest('[data-move]');
     const card = e.target.closest('.card');
     if (!card) return;
@@ -480,6 +483,139 @@
       toast('Import erfolgreich');
     });
   });
+
+  // ---------- Markdown-Export ----------
+  // Exportiert immer alle Stories (Suche/Epic-Filter werden ignoriert) in der aktuell gewählten Sortierung.
+  function sortedColumnStories(colId) {
+    const saved = { search: ui.search, epic: ui.epic };
+    ui.search = ''; ui.epic = '';
+    const list = visibleStories(colId);
+    Object.assign(ui, saved);
+    return list;
+  }
+
+  const mdText = (s) => String(s ?? '').replace(/\s+/g, ' ').trim();
+  const pointsSum = (list) => list.reduce((a, s) => a + (+s.points || 0), 0);
+  const countLabel = (n) => `${n} ${n === 1 ? 'Story' : 'Stories'}`;
+
+  function storyMarkdown(s, colName, level) {
+    const h = '#'.repeat(level);
+    const key = storyKey(s);
+    const lines = [`${h} ${key ? `${key} · ` : ''}${mdText(s.title)}`, ''];
+    if (s.role || s.want || s.benefit) {
+      lines.push(`**Als** ${mdText(s.role) || '…'} **möchte ich** ${mdText(s.want) || '…'}${s.benefit ? `, **damit** ${mdText(s.benefit)}` : ''}.`, '');
+    }
+    lines.push(`- **Status:** ${mdText(colName)}`);
+    lines.push(`- **Priorität:** ${PRIO[s.priority]?.label || s.priority}`);
+    lines.push(`- **Story Points:** ${s.points || '–'}`);
+    if (s.epic) lines.push(`- **Epic:** ${mdText(s.epic)}`);
+    const ac = s.criteria || [];
+    if (ac.length) {
+      lines.push('', '**Akzeptanzkriterien**', '', ...ac.map((c) => `- [ ] ${mdText(c)}`));
+    }
+    return lines.join('\n');
+  }
+
+  function buildMarkdown(colId = null) {
+    const name = mdText(state.settings.appName);
+    const date = new Date().toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const sortLabel = $('#sort').selectedOptions[0]?.textContent || '';
+    const cols = colId ? state.columns.filter((c) => c.id === colId) : state.columns;
+    const groups = cols.map((c) => ({ col: c, list: sortedColumnStories(c.id) }));
+    const all = groups.flatMap((g) => g.list);
+    const out = [];
+
+    if (colId) {
+      const { col, list } = groups[0];
+      out.push(`# ${name} – ${mdText(col.name)}`, '',
+        `_Export vom ${date} · ${countLabel(list.length)} · ${pointsSum(list)} SP · Sortierung: ${sortLabel}_`, '');
+      if (!list.length) out.push('_Keine Stories in dieser Spalte._');
+      list.forEach((s) => out.push(storyMarkdown(s, col.name, 2), '', '---', ''));
+    } else {
+      out.push(`# ${name} – User Stories`, '',
+        `_Export vom ${date} · ${countLabel(all.length)} · ${pointsSum(all)} SP · Sortierung: ${sortLabel}_`, '',
+        '| Spalte | Stories | Story Points |', '|---|---:|---:|',
+        ...groups.map((g) => `| ${mdText(g.col.name).replace(/\|/g, '\\|')} | ${g.list.length} | ${pointsSum(g.list)} |`), '');
+      for (const { col, list } of groups) {
+        out.push(`## ${mdText(col.name)} (${countLabel(list.length)} · ${pointsSum(list)} SP)`, '');
+        if (!list.length) out.push('_Keine Stories._', '');
+        list.forEach((s) => out.push(storyMarkdown(s, col.name, 3), ''));
+      }
+    }
+    while (out.length && ['', '---'].includes(out[out.length - 1])) out.pop();
+    return out.join('\n') + '\n';
+  }
+
+  const slug = (s) => String(s).toLowerCase()
+    .replace(/ä/g, 'ae').replace(/ö/g, 'oe').replace(/ü/g, 'ue').replace(/ß/g, 'ss')
+    .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '') || 'export';
+
+  function downloadMarkdown(colId) {
+    const col = state.columns.find((c) => c.id === colId);
+    const today = new Date().toISOString().slice(0, 10);
+    const file = `${slug(state.settings.appName)}-${col ? slug(col.name) : 'user-stories'}-${today}.md`;
+    const blob = new Blob([buildMarkdown(colId)], { type: 'text/markdown;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = file;
+    document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    toast(`${file} heruntergeladen`);
+  }
+
+  async function copyMarkdown(colId) {
+    const text = buildMarkdown(colId);
+    let ok = false;
+    try { await navigator.clipboard.writeText(text); ok = true; } catch { /* z. B. ohne https */ }
+    if (!ok) { // Fallback, funktioniert auch über http
+      const ta = document.createElement('textarea');
+      ta.value = text; ta.setAttribute('readonly', '');
+      ta.style.cssText = 'position:fixed;top:0;left:0;opacity:0;';
+      document.body.appendChild(ta); ta.select();
+      try { ok = document.execCommand('copy'); } catch { ok = false; }
+      ta.remove();
+    }
+    toast(ok ? 'Markdown kopiert – jetzt z. B. in Claude einfügen' : 'Kopieren nicht möglich – bitte herunterladen');
+  }
+
+  const menu = $('#exportMenu');
+  let menuCol = null, menuAnchor = null;
+
+  function openExportMenu(anchor, colId = null) {
+    if (!menu.hidden && menuAnchor === anchor) return closeExportMenu();
+    closeExportMenu();
+    menuCol = colId; menuAnchor = anchor;
+    const col = state.columns.find((c) => c.id === colId);
+    const n = col ? state.stories.filter((s) => s.column === colId).length : state.stories.length;
+    $('#exportMenuTitle').textContent = `${col ? col.name : 'Alle Spalten'} · ${countLabel(n)}`;
+    anchor.classList.add('open');
+    menu.hidden = false;
+    const r = anchor.getBoundingClientRect();
+    const w = menu.offsetWidth, h = menu.offsetHeight;
+    const left = Math.max(8, Math.min(r.right - w, window.innerWidth - w - 8));
+    const top = r.bottom + 6 + h > window.innerHeight ? Math.max(8, r.top - h - 6) : r.bottom + 6;
+    menu.style.left = `${left}px`; menu.style.top = `${top}px`;
+    menu.querySelector('button').focus({ preventScroll: true });
+  }
+  function closeExportMenu() {
+    menu.hidden = true;
+    menuAnchor?.classList.remove('open');
+    menuAnchor = null;
+  }
+
+  $('#exportAllBtn').addEventListener('click', (e) => { e.stopPropagation(); openExportMenu(e.currentTarget); });
+  menu.addEventListener('click', (e) => {
+    const b = e.target.closest('[data-export]'); if (!b) return;
+    const colId = menuCol;
+    closeExportMenu();
+    if (b.dataset.export === 'download') downloadMarkdown(colId); else copyMarkdown(colId);
+  });
+  document.addEventListener('click', (e) => {
+    if (!menu.hidden && !menu.contains(e.target) && !e.target.closest('[data-export-col], #exportAllBtn')) closeExportMenu();
+  });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeExportMenu(); });
+  window.addEventListener('resize', closeExportMenu);
+  $('#board').addEventListener('scroll', closeExportMenu, { passive: true });
 
   // ---------- Toast ----------
   let toastT;

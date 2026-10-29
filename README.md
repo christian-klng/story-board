@@ -13,6 +13,7 @@ Eine schlanke Übersicht für User Stories in der Produktentwicklung – als Boa
 - **Branding direkt in der Oberfläche**: Produktname, Primärfarbe und Logo (⚙︎ oben rechts)
 - **Mobil**: eine Spalte pro Bildschirm mit Wischen und Tabs, Bottom-Sheets, Dunkelmodus, „Zum Home-Bildschirm" möglich
 - **Postgres** als Speicher – alle Geräte sehen denselben Stand; Export/Import als JSON-Backup
+- **Markdown-Export** fürs ganze Board (Symbol oben rechts) oder pro Spalte (Pfeil im Spaltenkopf) – als `.md`-Datei oder direkt in die Zwischenablage, z. B. zum Weiterarbeiten in Claude. Exportiert immer alle Stories, in der gewählten Sortierung
 
 ## Deployment auf Coolify
 
