@@ -122,10 +122,18 @@ textarea.input { resize: vertical; min-height: 84px; line-height: 1.5; }
   backdrop-filter: saturate(180%) blur(12px); -webkit-backdrop-filter: saturate(180%) blur(12px);
   border-bottom: 1px solid var(--border);
 }
-.brand { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.brand { display: flex; align-items: center; gap: 8px; min-width: 0; flex: 1 1 auto; }
 .brand #appName { font-weight: 600; font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.app-switch {
+  appearance: none; display: flex; align-items: center; gap: 8px; min-width: 0; max-width: 100%;
+  height: 32px; margin-left: -6px; padding: 0 6px; border: 0; border-radius: var(--r-sm);
+  background: transparent; color: var(--text); font: inherit; cursor: pointer;
+}
+.app-switch:hover, .app-switch.open { background: var(--hover); }
+.app-switch:focus-visible { outline: none; box-shadow: 0 0 0 3px var(--primary-ring); }
+.app-switch .chev { width: 14px; height: 14px; color: var(--text-3); flex: none; }
 .crumb { color: var(--text-3); white-space: nowrap; }
-.top-actions { display: flex; align-items: center; gap: 2px; }
+.top-actions { display: flex; align-items: center; gap: 2px; flex: none; }
 .top-actions .btn { margin-right: 6px; }
 
 /* ---------- Toolbar ---------- */
@@ -374,7 +382,43 @@ dialog.modal form { display: flex; flex-direction: column; max-height: inherit; 
 .menu button:hover, .menu button:focus-visible { background: var(--hover); outline: none; }
 .menu button .ic { color: var(--text-3); }
 .icon-btn.open { background: var(--hover); color: var(--text); }
-@media (max-width: 600px) { .menu button { height: 40px; } }
+@media (max-width: 600px) { .menu button, .menu button.app-item { height: 42px; } .set-row > .input.mono { max-width: none; } }
+
+/* ---------- App-Menü ---------- */
+.app-menu { min-width: 260px; max-width: min(320px, calc(100vw - 16px)); }
+.app-list { display: grid; gap: 1px; max-height: min(50vh, 360px); overflow-y: auto; }
+.menu button.app-item { height: 36px; }
+.app-item .logo { width: 20px; height: 20px; border-radius: 5px; font-size: 10.5px; }
+.app-item .app-item-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.app-item .app-item-meta { color: var(--text-3); font-size: 11.5px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.app-item .ic.check { color: var(--primary); width: 14px; height: 14px; }
+.app-item:not(.current) .ic.check { visibility: hidden; }
+.menu-sep { height: 1px; margin: 4px -4px; background: var(--border); }
+
+/* ---------- Einstellungen: Tabs, Gefahrenzone ---------- */
+.seg {
+  display: flex; gap: 2px; margin: 4px 18px 6px; padding: 2px; width: fit-content;
+  background: var(--bg-sunken); border: 1px solid var(--border); border-radius: 8px;
+}
+.seg-btn {
+  appearance: none; border: 0; background: transparent; color: var(--text-2);
+  height: 26px; padding: 0 12px; border-radius: 6px; font: inherit; font-weight: 500; cursor: pointer;
+}
+.seg-btn.active { background: var(--surface); color: var(--text); box-shadow: 0 1px 2px rgb(16 18 27 / .08), 0 0 0 1px var(--border); }
+.danger-card { border-color: color-mix(in srgb, var(--danger) 25%, var(--border)); }
+.btn.danger-solid { background: var(--danger); border-color: transparent; color: #fff; }
+.btn.danger-solid:disabled { opacity: .45; cursor: not-allowed; }
+.confirm-row { display: flex; gap: 8px; }
+.confirm-row .input { flex: 1; }
+.input.mono, .modal input.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; text-transform: uppercase; letter-spacing: .04em; }
+.set-row > .input.mono { max-width: 140px; }
+
+/* ---------- Neue App ---------- */
+dialog.modal.narrow { width: min(520px, calc(100% - 32px)); }
+.new-app-hero { display: flex; align-items: center; gap: 12px; }
+.new-app-hero .logo { transition: background .15s; }
+.hint { margin: 0; color: var(--text-2); font-size: 12.5px; line-height: 1.5; }
+.hint b { font-weight: 500; color: var(--text); }
 
 /* ---------- Toast ---------- */
 .toast {

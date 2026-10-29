@@ -28,6 +28,8 @@
     <symbol id="i-chev-r" viewBox="0 0 16 16"><path d="m6.5 4 4 4-4 4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
     <symbol id="i-chev-u" viewBox="0 0 16 16"><path d="m4 9.5 4-4 4 4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
     <symbol id="i-chev-d" viewBox="0 0 16 16"><path d="m4 6.5 4 4 4-4" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-selector" viewBox="0 0 16 16"><path d="m5 6 3-3 3 3M5 10l3 3 3-3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
+    <symbol id="i-trash" viewBox="0 0 16 16"><path d="M3 4.5h10M6.5 4.5V3h3v1.5M4.5 4.5l.6 8.5h5.8l.6-8.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></symbol>
     <symbol id="i-download" viewBox="0 0 16 16"><path d="M8 2.5v7.5M4.8 7 8 10.2 11.2 7M3 12.8h10" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></symbol>
     <symbol id="i-copy" viewBox="0 0 16 16"><rect x="5.5" y="5.5" width="8" height="8" rx="1.6" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M10.5 3.5v-.3A1.2 1.2 0 0 0 9.3 2H3.7A1.2 1.2 0 0 0 2.5 3.2v5.6a1.2 1.2 0 0 0 1.2 1.2h.3" fill="none" stroke="currentColor" stroke-width="1.4"/></symbol>
     <symbol id="i-md" viewBox="0 0 16 16"><rect x="1.5" y="3.5" width="13" height="9" rx="1.8" fill="none" stroke="currentColor" stroke-width="1.3"/><path d="M4 10.2V5.8l1.8 2 1.8-2v4.4M10.8 5.8v4.2M9.3 8.6l1.5 1.5 1.5-1.5" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></symbol>
@@ -49,8 +51,11 @@
   <div id="app" hidden>
     <header class="topbar">
       <div class="brand">
-        <div class="logo" id="logo"></div>
-        <span id="appName">Story Board</span>
+        <button type="button" class="app-switch" id="appSwitch" aria-haspopup="menu" aria-expanded="false" title="App wechseln oder neue App anlegen">
+          <span class="logo" id="logo"></span>
+          <span id="appName">Story Board</span>
+          <svg class="ic chev"><use href="#i-selector"/></svg>
+        </button>
         <span class="crumb">/ User Stories</span>
       </div>
       <div class="top-actions">
@@ -147,13 +152,21 @@
         <span class="modal-crumb"><span class="logo xs" data-logo></span>Einstellungen</span>
         <button class="icon-btn" value="cancel" formnovalidate aria-label="Schließen"><svg class="ic"><use href="#i-x"/></svg></button>
       </header>
-      <div class="modal-body">
+      <div class="seg" role="tablist">
+        <button type="button" role="tab" class="seg-btn active" data-pane="app" aria-selected="true">Diese App</button>
+        <button type="button" role="tab" class="seg-btn" data-pane="general" aria-selected="false">Allgemein</button>
+      </div>
+      <div class="modal-body" data-pane-body="app">
         <section class="set-group">
           <h3>Erscheinungsbild</h3>
           <div class="set-card">
             <label class="set-row">
-              <span><b>Produktname</b><small>Erscheint in der Kopfzeile und im Browser-Tab</small></span>
+              <span><b>Name der App</b><small>Erscheint in der Kopfzeile und im Browser-Tab</small></span>
               <input name="appName" class="input" maxlength="40">
+            </label>
+            <label class="set-row">
+              <span><b>Kürzel</b><small>Für Story-IDs wie <span id="prefixExample">US-12</span>. Eine Änderung benennt alle IDs dieser App um.</small></span>
+              <input name="prefix" class="input mono" maxlength="8" autocomplete="off" autocapitalize="characters" spellcheck="false">
             </label>
             <div class="set-row">
               <span><b>Primärfarbe</b><small>Buttons, Markierungen, Fokus</small></span>
@@ -184,25 +197,43 @@
         </section>
 
         <section class="set-group">
-          <h3>Sicherheit</h3>
+          <h3>Daten</h3>
           <div class="set-card">
-            <label class="set-row">
-              <span><b>Neues Passwort</b><small>Leer lassen = unverändert. Meldet andere Geräte ab.</small></span>
-              <input name="newPw" class="input" type="password" autocomplete="new-password">
-            </label>
+            <div class="set-row">
+              <span><b>Backup</b><small>JSON-Export dieser App. Ein Import ersetzt ihre Spalten und Stories.</small></span>
+              <div class="logo-pick">
+                <a class="btn sm" id="exportBtn" href="#" download>Exportieren</a>
+                <label class="btn sm">Importieren<input type="file" id="importInput" accept="application/json" hidden></label>
+              </div>
+            </div>
           </div>
         </section>
 
         <section class="set-group">
-          <h3>Daten</h3>
-          <div class="set-card">
+          <h3>Gefahrenzone</h3>
+          <div class="set-card danger-card">
             <div class="set-row">
-              <span><b>Backup</b><small>JSON-Export. Ein Import ersetzt das komplette Board.</small></span>
-              <div class="logo-pick">
-                <a class="btn sm" id="exportBtn" href="api/export" download>Exportieren</a>
-                <label class="btn sm">Importieren<input type="file" id="importInput" accept="application/json" hidden></label>
+              <span><b>App löschen</b><small id="deleteAppHint">Löscht diese App mit allen Spalten und Stories endgültig.</small></span>
+              <button class="btn sm danger" type="button" id="deleteAppStart"><svg class="ic"><use href="#i-trash"/></svg>App löschen</button>
+            </div>
+            <div class="set-row stack" id="deleteAppConfirm" hidden>
+              <span><b>Zum Bestätigen den Namen eintippen</b><small id="deleteAppName"></small></span>
+              <div class="confirm-row">
+                <input class="input" id="deleteAppInput" autocomplete="off" spellcheck="false">
+                <button class="btn sm danger-solid" type="button" id="deleteAppBtn" disabled>Endgültig löschen</button>
               </div>
             </div>
+          </div>
+        </section>
+      </div>
+      <div class="modal-body" data-pane-body="general" hidden>
+        <section class="set-group">
+          <h3>Sicherheit</h3>
+          <div class="set-card">
+            <label class="set-row">
+              <span><b>Neues Passwort</b><small>Gilt für alle Apps. Leer lassen = unverändert. Meldet andere Geräte ab.</small></span>
+              <input name="newPw" class="input" type="password" autocomplete="new-password">
+            </label>
           </div>
         </section>
       </div>
@@ -210,6 +241,58 @@
         <span class="spacer"></span>
         <button class="btn" value="cancel" formnovalidate>Abbrechen</button>
         <button class="btn primary" value="save">Speichern</button>
+      </footer>
+    </form>
+  </dialog>
+
+  <!-- App-Menü -->
+  <div id="appMenu" class="menu app-menu" role="menu" hidden>
+    <div class="menu-head">Apps</div>
+    <div id="appList" class="app-list"></div>
+    <div class="menu-sep"></div>
+    <button type="button" role="menuitem" id="newAppBtn"><svg class="ic"><use href="#i-plus"/></svg>Neue App</button>
+    <button type="button" role="menuitem" id="appSettingsBtn"><svg class="ic"><use href="#i-gear"/></svg>App-Einstellungen</button>
+  </div>
+
+  <!-- Neue App -->
+  <dialog id="appDlg" class="modal narrow">
+    <form method="dialog" id="appForm">
+      <header class="modal-head">
+        <span class="modal-crumb">Neue App</span>
+        <button class="icon-btn" value="cancel" formnovalidate aria-label="Schließen"><svg class="ic"><use href="#i-x"/></svg></button>
+      </header>
+      <div class="modal-body">
+        <div class="new-app-hero">
+          <div class="logo lg" id="newAppLogo">N</div>
+          <input name="name" class="title-input" maxlength="40" placeholder="Name der App" autocomplete="off" required>
+        </div>
+        <div class="set-card">
+          <label class="set-row">
+            <span><b>Kürzel</b><small>Story-IDs werden <span id="newPrefixExample">APP-1</span>, <span id="newPrefixExample2">APP-2</span> …</small></span>
+            <input name="prefix" class="input mono" maxlength="8" autocomplete="off" autocapitalize="characters" spellcheck="false" required placeholder="APP">
+          </label>
+          <div class="set-row">
+            <span><b>Farbe</b></span>
+            <div class="color-pick">
+              <div class="swatches" id="newAppSwatches"></div>
+              <label class="color-input" title="Eigene Farbe"><input name="color" type="color"></label>
+            </div>
+          </div>
+          <div class="set-row">
+            <span><b>Logo</b><small>Optional, auch später änderbar</small></span>
+            <div class="logo-pick">
+              <label class="btn sm">Hochladen<input type="file" id="newAppLogoInput" accept="image/*" hidden></label>
+              <button class="btn sm ghost" type="button" id="newAppLogoReset" hidden>Entfernen</button>
+            </div>
+          </div>
+        </div>
+        <p class="hint">Startet mit den Standardspalten <b>Backlog · Bereit · In Arbeit · Review · Fertig</b>. Du kannst sie in den App-Einstellungen anpassen.</p>
+        <p class="error" id="appFormError" hidden></p>
+      </div>
+      <footer class="modal-foot">
+        <span class="spacer"></span>
+        <button class="btn" value="cancel" formnovalidate>Abbrechen</button>
+        <button class="btn primary" value="create" id="createAppBtn">App anlegen</button>
       </footer>
     </form>
   </dialog>

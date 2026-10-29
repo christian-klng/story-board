@@ -9,8 +9,13 @@
     wont:   { label: "Won't have",  rank: 3 },
   };
   const SWATCHES = ['#5e6ad2', '#0f7ae5', '#26b5ce', '#4cb782', '#f2994a', '#eb5757', '#d55bb0', '#23252b'];
-  const DEFAULT_SETTINGS = { appName: 'Story Board', color: '#5e6ad2', logo: '' };
-  const ID_PREFIX = 'US';
+  const DEFAULT_SETTINGS = { appName: 'Story Board', prefix: 'US', color: '#5e6ad2', logo: '' };
+  const PREFIX_RE = /^[A-Z][A-Z0-9]{1,7}$/;
+  const LAST_APP_KEY = 'storyboard.lastApp';
+  const lastApp = {
+    get() { try { return localStorage.getItem(LAST_APP_KEY); } catch { return null; } },
+    set(v) { try { localStorage.setItem(LAST_APP_KEY, v); } catch { /* privater Modus */ } },
+  };
 
   const $ = (s, el = document) => el.querySelector(s);
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -58,9 +63,12 @@
     let h = 0; for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
     return `hsl(${h % 360} 62% 55%)`;
   }
-  const storyKey = (s) => (s.number ? `${ID_PREFIX}-${s.number}` : '');
+  const storyKey = (s) => (s.number ? `${state.settings.prefix || 'US'}-${s.number}` : '');
 
-  let state = { settings: { ...DEFAULT_SETTINGS }, columns: [], stories: [] };
+  let state = { app: null, settings: { ...DEFAULT_SETTINGS }, columns: [], stories: [] };
+  let apps = [];            // alle Apps (für den Wechsler)
+  let currentAppId = null;  // aktuell geöffnete App
+  const appUrl = (path) => `api/apps/${encodeURIComponent(currentAppId)}/${path}`;
 
   // ---------- API ----------
   async function api(method, url, body) {
@@ -72,7 +80,7 @@
     });
     const data = await res.json().catch(() => ({}));
     if (res.status === 401 && url !== 'api/login') { showLock(); throw new Error('Nicht angemeldet'); }
-    if (!res.ok) throw new Error(data.error || `Fehler ${res.status}`);
+    if (!res.ok) throw Object.assign(new Error(data.error || `Fehler ${res.status}`), { status: res.status });
     return data;
   }
 
@@ -83,9 +91,51 @@
     }
   }
 
+  async function loadApps() {
+    apps = await api('GET', 'api/apps');
+    return apps;
+  }
+
+  // Schlüssel aus ?app=… oder zuletzt genutzt → passende App, sonst die erste
+  function pickApp(key) {
+    const k = String(key || '').toLowerCase();
+    return apps.find((a) => a.id === key || a.prefix.toLowerCase() === k) || apps[0];
+  }
+
   async function reload() {
-    state = await api('GET', 'api/board');
+    try {
+      state = await api('GET', appUrl('board'));
+    } catch (e) {
+      if (e.status !== 404) throw e;
+      // App wurde inzwischen (z. B. auf einem anderen Gerät) gelöscht → erste App öffnen
+      await loadApps();
+      if (!apps.length || apps[0].id === currentAppId) throw e;
+      currentAppId = apps[0].id;
+      state = await api('GET', appUrl('board'));
+      toast('Diese App gibt es nicht mehr – erste App geöffnet');
+    }
+    rememberApp();
     render();
+  }
+
+  // Aktuelle App in der Adresse (?app=kürzel) und als „zuletzt genutzt“ merken
+  function rememberApp() {
+    const key = state.settings.prefix.toLowerCase();
+    lastApp.set(key);
+    const u = new URL(location.href);
+    if (u.searchParams.get('app') !== key) {
+      u.searchParams.set('app', key);
+      history.replaceState(null, '', u);
+    }
+  }
+
+  async function switchApp(id) {
+    closeMenus();
+    if (id === currentAppId) return;
+    currentAppId = id;
+    ui.search = ''; ui.epic = ''; $('#search').value = '';
+    activeCol = 0; $('#board').scrollLeft = 0;
+    await safely(reload);
   }
 
   // ---------- Sperre ----------
@@ -117,6 +167,9 @@
   });
 
   async function unlock() {
+    await loadApps();
+    const key = new URLSearchParams(location.search).get('app') || lastApp.get();
+    currentAppId = pickApp(key)?.id;
     await reload();
     $('#lock').hidden = true;
     $('#app').hidden = false;
@@ -146,7 +199,29 @@
     $('#appName').textContent = s.appName;
     $('#lockTitle').textContent = s.appName;
     for (const el of [$('#logo'), $('#lockLogo'), ...document.querySelectorAll('[data-logo]')]) el.innerHTML = logoHTML(s);
-    document.querySelectorAll('.swatch').forEach((sw) => sw.classList.toggle('active', sw.dataset.c.toLowerCase() === s.color.toLowerCase()));
+    markSwatches('#swatches', s.color);
+  }
+  function markSwatches(sel, color) {
+    document.querySelectorAll(`${sel} .swatch`).forEach((sw) => sw.classList.toggle('active', sw.dataset.c.toLowerCase() === String(color).toLowerCase()));
+  }
+  const swatchHTML = () => SWATCHES.map((c) => `<button type="button" class="swatch" style="background:${c}" data-c="${c}" aria-label="Farbe ${c}"></button>`).join('');
+
+  // Logo-Datei lesen und auf 256 px verkleinern, damit es schlank in der Datenbank liegt
+  function readLogo(file) {
+    return new Promise((resolve, reject) => {
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+      img.onload = () => {
+        const max = 256, r = Math.min(1, max / Math.max(img.width, img.height));
+        const cv = document.createElement('canvas');
+        cv.width = Math.max(1, Math.round(img.width * r)); cv.height = Math.max(1, Math.round(img.height * r));
+        cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
+        URL.revokeObjectURL(url);
+        resolve(cv.toDataURL('image/png'));
+      };
+      img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('Bild konnte nicht gelesen werden.')); };
+      img.src = url;
+    });
   }
 
   // ---------- Rendering ----------
@@ -392,49 +467,59 @@
 
   // ---------- Einstellungen ----------
   const setDlg = $('#settingsDlg');
-  let draft = null; // Vorschau für Farbe/Logo/Name
+  let draft = null; // Vorschau für Name/Kürzel/Farbe/Logo
 
-  $('#swatches').innerHTML = SWATCHES.map((c) => `<button type="button" class="swatch" style="background:${c}" data-c="${c}" aria-label="${c}"></button>`).join('');
+  $('#swatches').innerHTML = swatchHTML();
 
   function previewDraft() {
     applyBranding(draft);
     $('#logoPreview').innerHTML = logoHTML(draft);
+    $('#prefixExample').textContent = `${draft.prefix || '…'}-12`;
   }
 
-  $('#settingsBtn').addEventListener('click', () => {
+  function showPane(name) {
+    document.querySelectorAll('#settingsDlg .seg-btn').forEach((b) => {
+      b.classList.toggle('active', b.dataset.pane === name);
+      b.setAttribute('aria-selected', String(b.dataset.pane === name));
+    });
+    document.querySelectorAll('#settingsDlg [data-pane-body]').forEach((el) => { el.hidden = el.dataset.paneBody !== name; });
+  }
+  $('#settingsDlg .seg').addEventListener('click', (e) => { const b = e.target.closest('.seg-btn'); if (b) showPane(b.dataset.pane); });
+
+  function openSettings() {
+    closeMenus();
     draft = { ...state.settings };
     const f = $('#settingsForm').elements;
     f.appName.value = draft.appName;
+    f.prefix.value = draft.prefix;
     f.color.value = draft.color;
     f.columns.value = state.columns.map((c) => c.name).join('\n');
     f.newPw.value = '';
+    $('#exportBtn').href = appUrl('export');
+    resetDeleteConfirm();
+    showPane('app');
     previewDraft();
     setDlg.showModal();
-  });
+  }
+  $('#settingsBtn').addEventListener('click', openSettings);
 
   const sf = $('#settingsForm').elements;
   sf.color.addEventListener('input', (e) => { draft.color = e.target.value; previewDraft(); });
-  sf.appName.addEventListener('input', (e) => { draft.appName = e.target.value || 'Story Board'; previewDraft(); });
+  sf.appName.addEventListener('input', (e) => { draft.appName = e.target.value.trim() || 'Story Board'; previewDraft(); });
+  sf.prefix.addEventListener('input', (e) => {
+    const v = cleanPrefixInput(e.target.value);
+    if (v !== e.target.value) e.target.value = v;
+    draft.prefix = v; previewDraft();
+  });
   $('#swatches').addEventListener('click', (e) => {
     const c = e.target.dataset.c; if (!c) return;
     draft.color = c; sf.color.value = c; previewDraft();
   });
 
-  $('#logoInput').addEventListener('change', (e) => {
+  $('#logoInput').addEventListener('change', async (e) => {
     const file = e.target.files[0]; e.target.value = '';
     if (!file) return;
-    const img = new Image();
-    const url = URL.createObjectURL(file);
-    img.onload = () => { // auf 256 px verkleinern, damit es schlank in der Datenbank liegt
-      const max = 256, r = Math.min(1, max / Math.max(img.width, img.height));
-      const cv = document.createElement('canvas');
-      cv.width = Math.round(img.width * r); cv.height = Math.round(img.height * r);
-      cv.getContext('2d').drawImage(img, 0, 0, cv.width, cv.height);
-      draft.logo = cv.toDataURL('image/png');
-      URL.revokeObjectURL(url); previewDraft();
-    };
-    img.onerror = () => toast('Bild konnte nicht gelesen werden.');
-    img.src = url;
+    try { draft.logo = await readLogo(file); previewDraft(); } catch (err) { toast(err.message); }
   });
   $('#logoReset').addEventListener('click', () => { draft.logo = ''; previewDraft(); });
 
@@ -451,17 +536,37 @@
     });
   }
 
+  // Vor dem Schließen prüfen (sonst wäre die Eingabe weg)
+  $('#settingsForm').addEventListener('submit', (e) => {
+    if (e.submitter?.value !== 'save') return;
+    const f = $('#settingsForm').elements;
+    let msg = '';
+    if (!f.appName.value.trim()) msg = 'Bitte einen Namen für die App eingeben.';
+    else if (!PREFIX_RE.test(f.prefix.value)) msg = 'Kürzel: 2–8 Zeichen, A–Z und 0–9, beginnend mit einem Buchstaben.';
+    else if (apps.some((a) => a.id !== currentAppId && a.prefix.toUpperCase() === f.prefix.value)) msg = `Das Kürzel ${f.prefix.value} nutzt schon eine andere App.`;
+    if (msg) { e.preventDefault(); showPane('app'); toast(msg); f[msg.startsWith('Bitte') ? 'appName' : 'prefix'].focus(); }
+  });
+
   setDlg.addEventListener('close', () => {
     if (setDlg.returnValue !== 'save') { applyBranding(); return; }
     const f = $('#settingsForm').elements;
     const columns = columnPayload(f.columns.value);
     const columnsChanged = JSON.stringify(columns) !== JSON.stringify(state.columns.map(({ id, name }) => ({ id, name })));
     const newPw = f.newPw.value;
-    state.settings = { ...draft };
+    const patch = { name: f.appName.value.trim(), prefix: f.prefix.value, color: draft.color, logo: draft.logo };
+    const old = state.settings;
+    const appChanged = patch.name !== old.appName || patch.prefix !== old.prefix || patch.color !== old.color || patch.logo !== old.logo;
+    state.settings = { appName: patch.name, prefix: patch.prefix, color: patch.color, logo: patch.logo };
     render();
     safely(async () => {
-      state.settings = await api('PUT', 'api/settings', draft);
-      if (columns.length && columnsChanged) state = await api('PUT', 'api/columns', columns);
+      if (appChanged) {
+        const a = await api('PATCH', `api/apps/${encodeURIComponent(currentAppId)}`, patch);
+        state.app = a;
+        state.settings = { appName: a.name, prefix: a.prefix, color: a.color, logo: a.logo };
+        apps = apps.map((x) => (x.id === a.id ? a : x));
+        rememberApp();
+      }
+      if (columns.length && columnsChanged) state = await api('PUT', appUrl('columns'), columns);
       if (newPw) {
         if (newPw.length < 4) toast('Passwort zu kurz – nicht geändert.');
         else { await api('PUT', 'api/password', { password: newPw }); toast('Passwort geändert'); }
@@ -470,18 +575,200 @@
     });
   });
 
+  // App löschen: Name eintippen zur Bestätigung; die letzte App bleibt
+  function resetDeleteConfirm() {
+    const last = apps.length <= 1;
+    $('#deleteAppStart').disabled = last;
+    $('#deleteAppHint').textContent = last
+      ? 'Die letzte App kann nicht gelöscht werden.'
+      : 'Löscht diese App mit allen Spalten und Stories endgültig.';
+    $('#deleteAppConfirm').hidden = true;
+    $('#deleteAppInput').value = '';
+    $('#deleteAppBtn').disabled = true;
+  }
+  $('#deleteAppStart').addEventListener('click', () => {
+    $('#deleteAppName').textContent = `„${state.settings.appName}“ · ${state.stories.length} ${state.stories.length === 1 ? 'Story' : 'Stories'} werden gelöscht`;
+    $('#deleteAppConfirm').hidden = false;
+    $('#deleteAppInput').focus();
+  });
+  $('#deleteAppInput').addEventListener('input', (e) => {
+    $('#deleteAppBtn').disabled = e.target.value.trim() !== state.settings.appName;
+  });
+  $('#deleteAppInput').addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); if (!$('#deleteAppBtn').disabled) $('#deleteAppBtn').click(); } });
+  $('#deleteAppBtn').addEventListener('click', () => {
+    const name = state.settings.appName;
+    const id = currentAppId;
+    setDlg.close('deleted');
+    safely(async () => {
+      await api('DELETE', `api/apps/${encodeURIComponent(id)}`);
+      await loadApps();
+      currentAppId = null;
+      await switchApp(apps[0].id);
+      toast(`App „${name}“ gelöscht`);
+    });
+  });
+
   $('#importInput').addEventListener('change', async (e) => {
     const file = e.target.files[0]; e.target.value = '';
     if (!file) return;
     let data;
     try { data = JSON.parse(await file.text()); } catch { return toast('Ungültige Datei'); }
-    if (!confirm('Das komplette Board durch den Import ersetzen?')) return;
+    if (!confirm(`Spalten und Stories von „${state.settings.appName}“ durch den Import ersetzen?`)) return;
     safely(async () => {
-      state = await api('POST', 'api/import', data);
+      state = await api('POST', appUrl('import'), data);
+      await loadApps();
       setDlg.close('imported');
+      rememberApp();
       render();
       toast('Import erfolgreich');
     });
+  });
+
+  // ---------- Apps: Wechsler und neue App ----------
+  const appMenu = $('#appMenu');
+
+  function renderAppList() {
+    $('#appList').innerHTML = apps.map((a) => {
+      const cur = a.id === currentAppId;
+      return `<button type="button" role="menuitemradio" aria-checked="${cur}" class="app-item ${cur ? 'current' : ''}" data-app="${esc(a.id)}">
+        <span class="logo" style="background:${esc(a.color)};color:${inkFor(a.color)}">${logoHTML({ appName: a.name, logo: a.logo })}</span>
+        <span class="app-item-name">${esc(a.name)}</span>
+        <span class="app-item-meta">${esc(a.prefix)} · ${a.storyCount}</span>
+        ${icon('check', 'ic check')}
+      </button>`;
+    }).join('');
+  }
+
+  function placeMenu(el, anchor, align = 'right') {
+    el.hidden = false;
+    const r = anchor.getBoundingClientRect();
+    const w = el.offsetWidth, h = el.offsetHeight;
+    const want = align === 'left' ? r.left : r.right - w;
+    const left = Math.max(8, Math.min(want, window.innerWidth - w - 8));
+    const top = r.bottom + 6 + h > window.innerHeight ? Math.max(8, r.top - h - 6) : r.bottom + 6;
+    el.style.left = `${left}px`; el.style.top = `${top}px`;
+  }
+
+  function openAppMenu() {
+    if (!appMenu.hidden) return closeMenus();
+    closeMenus();
+    renderAppList();
+    placeMenu(appMenu, $('#appSwitch'), 'left');
+    $('#appSwitch').classList.add('open');
+    $('#appSwitch').setAttribute('aria-expanded', 'true');
+    (appMenu.querySelector('.app-item.current') || appMenu.querySelector('button')).focus({ preventScroll: true });
+    // Story-Zahlen frisch holen, ohne das Öffnen zu verzögern
+    loadApps().then(() => { if (!appMenu.hidden) renderAppList(); }).catch(() => {});
+  }
+  function closeAppMenu() {
+    appMenu.hidden = true;
+    $('#appSwitch').classList.remove('open');
+    $('#appSwitch').setAttribute('aria-expanded', 'false');
+  }
+
+  $('#appSwitch').addEventListener('click', (e) => { e.stopPropagation(); openAppMenu(); });
+  appMenu.addEventListener('click', (e) => {
+    const item = e.target.closest('[data-app]');
+    if (item) return switchApp(item.dataset.app);
+  });
+  $('#newAppBtn').addEventListener('click', () => { closeMenus(); openNewApp(); });
+  $('#appSettingsBtn').addEventListener('click', openSettings);
+  // Pfeiltasten im Menü
+  appMenu.addEventListener('keydown', (e) => {
+    if (!['ArrowDown', 'ArrowUp'].includes(e.key)) return;
+    e.preventDefault();
+    const items = [...appMenu.querySelectorAll('button')];
+    const i = items.indexOf(document.activeElement);
+    items[(i + (e.key === 'ArrowDown' ? 1 : -1) + items.length) % items.length].focus();
+  });
+
+  // Neue App
+  const appDlg = $('#appDlg');
+  const af = $('#appForm').elements;
+  let newApp = null;
+  $('#newAppSwatches').innerHTML = swatchHTML();
+
+  function cleanPrefixInput(v) {
+    return String(v).toUpperCase().replace(/[ÄÖÜ]/g, (c) => ({ Ä: 'A', Ö: 'O', Ü: 'U' }[c])).replace(/[^A-Z0-9]/g, '').replace(/^[0-9]+/, '').slice(0, 8);
+  }
+  // Kürzel-Vorschlag aus dem Namen: Initialen bei mehreren Wörtern, sonst die ersten Buchstaben; eindeutig gemacht
+  function suggestPrefix(name) {
+    const words = name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toUpperCase().split(/[^A-Z0-9]+/).filter(Boolean);
+    let p = words.length > 1 ? words.map((w) => w[0]).join('').slice(0, 4) : (words[0] || '').slice(0, 4);
+    p = cleanPrefixInput(p);
+    if (p.length === 1) p += (words[0] || 'X').slice(1, 2) || 'X';
+    if (!p) return '';
+    const taken = new Set(apps.map((a) => a.prefix.toUpperCase()));
+    if (!taken.has(p)) return p;
+    for (let n = 2; n < 100; n++) { const c = `${p.slice(0, 8 - String(n).length)}${n}`; if (!taken.has(c)) return c; }
+    return p;
+  }
+
+  function previewNewApp() {
+    const logo = $('#newAppLogo');
+    logo.style.background = newApp.color;
+    logo.style.color = inkFor(newApp.color);
+    logo.innerHTML = logoHTML({ appName: af.name.value || 'N', logo: newApp.logo });
+    markSwatches('#newAppSwatches', newApp.color);
+    const p = af.prefix.value || 'APP';
+    $('#newPrefixExample').textContent = `${p}-1`;
+    $('#newPrefixExample2').textContent = `${p}-2`;
+    $('#newAppLogoReset').hidden = !newApp.logo;
+  }
+
+  function openNewApp() {
+    const used = new Set(apps.map((a) => a.color.toLowerCase()));
+    newApp = { color: SWATCHES.find((c) => !used.has(c)) || SWATCHES[apps.length % SWATCHES.length], logo: '', prefixTouched: false };
+    $('#appForm').reset();
+    af.color.value = newApp.color;
+    $('#appFormError').hidden = true;
+    previewNewApp();
+    appDlg.showModal();
+    af.name.focus();
+  }
+
+  af.name.addEventListener('input', () => {
+    if (!newApp.prefixTouched) af.prefix.value = suggestPrefix(af.name.value);
+    previewNewApp();
+  });
+  af.prefix.addEventListener('input', (e) => {
+    newApp.prefixTouched = e.target.value !== '';
+    const v = cleanPrefixInput(e.target.value);
+    if (v !== e.target.value) e.target.value = v;
+    previewNewApp();
+  });
+  af.color.addEventListener('input', (e) => { newApp.color = e.target.value; previewNewApp(); });
+  $('#newAppSwatches').addEventListener('click', (e) => {
+    const c = e.target.dataset.c; if (!c) return;
+    newApp.color = c; af.color.value = c; previewNewApp();
+  });
+  $('#newAppLogoInput').addEventListener('change', async (e) => {
+    const file = e.target.files[0]; e.target.value = '';
+    if (!file) return;
+    try { newApp.logo = await readLogo(file); previewNewApp(); } catch (err) { toast(err.message); }
+  });
+  $('#newAppLogoReset').addEventListener('click', () => { newApp.logo = ''; previewNewApp(); });
+
+  $('#appForm').addEventListener('submit', async (e) => {
+    if (e.submitter?.value !== 'create') return;
+    e.preventDefault();
+    const err = (m) => { $('#appFormError').textContent = m; $('#appFormError').hidden = false; };
+    const name = af.name.value.trim();
+    const prefix = af.prefix.value;
+    if (!name) return err('Bitte einen Namen eingeben.');
+    if (!PREFIX_RE.test(prefix)) return err('Kürzel: 2–8 Zeichen, A–Z und 0–9, beginnend mit einem Buchstaben.');
+    $('#createAppBtn').disabled = true;
+    try {
+      const created = await api('POST', 'api/apps', { name, prefix, color: newApp.color, logo: newApp.logo });
+      appDlg.close('created');
+      await loadApps();
+      await switchApp(created.id);
+      toast(`App „${created.name}“ angelegt`);
+    } catch (ex) {
+      if (ex.message !== 'Nicht angemeldet') err(ex.message);
+    } finally {
+      $('#createAppBtn').disabled = false;
+    }
   });
 
   // ---------- Markdown-Export ----------
@@ -583,7 +870,7 @@
 
   function openExportMenu(anchor, colId = null) {
     if (!menu.hidden && menuAnchor === anchor) return closeExportMenu();
-    closeExportMenu();
+    closeMenus();
     menuCol = colId; menuAnchor = anchor;
     const col = state.columns.find((c) => c.id === colId);
     const n = col ? state.stories.filter((s) => s.column === colId).length : state.stories.length;
@@ -610,11 +897,18 @@
     closeExportMenu();
     if (b.dataset.export === 'download') downloadMarkdown(colId); else copyMarkdown(colId);
   });
+  function closeMenus() { closeExportMenu(); closeAppMenu(); }
   document.addEventListener('click', (e) => {
     if (!menu.hidden && !menu.contains(e.target) && !e.target.closest('[data-export-col], #exportAllBtn')) closeExportMenu();
+    if (!appMenu.hidden && !appMenu.contains(e.target) && !e.target.closest('#appSwitch')) closeAppMenu();
   });
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeExportMenu(); });
-  window.addEventListener('resize', closeExportMenu);
+  document.addEventListener('keydown', (e) => {
+    if (e.key !== 'Escape') return;
+    const wasOpen = !appMenu.hidden;
+    closeMenus();
+    if (wasOpen) $('#appSwitch').focus();
+  });
+  window.addEventListener('resize', closeMenus);
   $('#board').addEventListener('scroll', closeExportMenu, { passive: true });
 
   // ---------- Toast ----------
@@ -634,7 +928,8 @@
   // ---------- Start ----------
   (async () => {
     try {
-      const s = await api('GET', 'api/session');
+      const key = new URLSearchParams(location.search).get('app') || lastApp.get();
+      const s = await api('GET', `api/session${key ? `?app=${encodeURIComponent(key)}` : ''}`);
       state.settings = { ...DEFAULT_SETTINGS, ...s.branding };
       applyBranding();
       if (s.authed) await unlock();
